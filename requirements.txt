@@ -1,0 +1,3 @@
+# BombBuster - Core Dependencies
+# Currently using only Python standard library
+# Add packages here as needed

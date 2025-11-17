@@ -1,0 +1,379 @@
+"""
+Statistics and analysis module for the BombBuster belief system.
+Tracks uncertainty metrics and provides call suggestions.
+"""
+
+import math
+from typing import Dict, List, Tuple, Set, Union, Optional
+from src.belief.belief_model import BeliefModel
+from config.game_config import GameConfig
+
+
+class GameStatistics:
+    """
+    Analyzes the belief system to compute uncertainty metrics and suggest optimal calls.
+    
+    This class provides:
+    - Entropy calculations (Shannon entropy) for measuring uncertainty
+    - Per-player and system-wide statistics
+    - Call suggestion algorithms
+    - Progress tracking
+    """
+    
+    def __init__(self, belief_model: BeliefModel, config: GameConfig, my_wire: List[Union[int, float]] = None):
+        """
+        Initialize statistics for a belief model.
+        
+        Args:
+            belief_model: The belief model to analyze
+            config: Game configuration
+            my_wire: Optional - the player's actual wire (for call filtering)
+        """
+        self.belief_model = belief_model
+        self.config = config
+        self.my_wire = my_wire
+        self.my_player_id = belief_model.my_player_id
+    
+    def calculate_position_entropy(self, player_id: int, position: int) -> float:
+        """
+        Calculate Shannon entropy for a single position.
+        
+        H = -Σ P(value) × log₂(P(value))
+        
+        For uniform belief: P(value) = 1 / |possible_values|
+        
+        Args:
+            player_id: Player whose position to analyze
+            position: Position index
+            
+        Returns:
+            Entropy in bits (0 = certain, higher = more uncertain)
+        """
+        possible_values = self.belief_model.beliefs[player_id][position]
+        n = len(possible_values)
+        
+        if n <= 1:
+            return 0.0  # Certain or empty (no uncertainty)
+        
+        # Uniform distribution: P = 1/n for each value
+        # H = -n × (1/n × log₂(1/n)) = -log₂(1/n) = log₂(n)
+        return math.log2(n)
+    
+    def calculate_player_entropy(self, player_id: int) -> float:
+        """
+        Calculate total entropy for one player's wire.
+        
+        Args:
+            player_id: Player to analyze
+            
+        Returns:
+            Total entropy across all positions (in bits)
+        """
+        total_entropy = 0.0
+        for position in range(self.config.wires_per_player):
+            total_entropy += self.calculate_position_entropy(player_id, position)
+        return total_entropy
+    
+    def calculate_system_entropy(self) -> float:
+        """
+        Calculate total entropy across all players.
+        
+        Returns:
+            Total system entropy (in bits)
+        """
+        total_entropy = 0.0
+        for player_id in range(self.config.n_players):
+            total_entropy += self.calculate_player_entropy(player_id)
+        return total_entropy
+    
+    def get_player_statistics(self, player_id: int) -> Dict:
+        """
+        Get comprehensive statistics for one player.
+        
+        Args:
+            player_id: Player to analyze
+            
+        Returns:
+            Dict with keys:
+            - 'entropy': Total entropy (bits)
+            - 'entropy_normalized': Normalized entropy (0-1)
+            - 'certain_count': Number of certain positions
+            - 'uncertain_count': Number of uncertain positions
+            - 'avg_possibilities': Average number of possibilities per position
+            - 'progress_percent': Percentage of positions that are certain
+        """
+        entropy = self.calculate_player_entropy(player_id)
+        
+        # Maximum possible entropy: all positions have all values possible
+        max_entropy = self.config.wires_per_player * math.log2(len(self.config.wire_values))
+        entropy_normalized = entropy / max_entropy if max_entropy > 0 else 0.0
+        
+        certain_count = 0
+        uncertain_count = 0
+        total_possibilities = 0
+        
+        for position in range(self.config.wires_per_player):
+            possible = self.belief_model.beliefs[player_id][position]
+            if len(possible) == 1:
+                certain_count += 1
+            else:
+                uncertain_count += 1
+            total_possibilities += len(possible)
+        
+        avg_possibilities = total_possibilities / self.config.wires_per_player if self.config.wires_per_player > 0 else 0
+        progress_percent = 100.0 * certain_count / self.config.wires_per_player if self.config.wires_per_player > 0 else 0
+        
+        return {
+            'entropy': entropy,
+            'entropy_normalized': entropy_normalized,
+            'certain_count': certain_count,
+            'uncertain_count': uncertain_count,
+            'avg_possibilities': avg_possibilities,
+            'progress_percent': progress_percent
+        }
+    
+    def get_system_statistics(self) -> Dict:
+        """
+        Get system-wide statistics.
+        
+        Returns:
+            Dict with keys:
+            - 'total_entropy': Total system entropy
+            - 'avg_player_entropy': Average per-player entropy
+            - 'completion_percent': Overall completion percentage
+            - 'most_uncertain_player': Player ID with highest entropy
+        """
+        total_entropy = self.calculate_system_entropy()
+        
+        player_entropies = {pid: self.calculate_player_entropy(pid) 
+                           for pid in range(self.config.n_players)}
+        
+        avg_player_entropy = total_entropy / self.config.n_players if self.config.n_players > 0 else 0
+        
+        # Calculate overall completion
+        total_certain = sum(self.get_player_statistics(pid)['certain_count'] 
+                           for pid in range(self.config.n_players))
+        total_positions = self.config.n_players * self.config.wires_per_player
+        completion_percent = 100.0 * total_certain / total_positions if total_positions > 0 else 0
+        
+        most_uncertain_player = max(player_entropies, key=player_entropies.get) if player_entropies else 0
+        
+        return {
+            'total_entropy': total_entropy,
+            'avg_player_entropy': avg_player_entropy,
+            'completion_percent': completion_percent,
+            'most_uncertain_player': most_uncertain_player,
+            'player_entropies': player_entropies
+        }
+    
+    def get_certain_values(self) -> Set[Union[int, float]]:
+        """
+        Get the set of values this player is certain they have.
+        
+        Returns:
+            Set of certain values
+        """
+        if self.my_wire is not None:
+            return set(self.my_wire)
+        
+        certain_values = set()
+        for position in range(self.config.wires_per_player):
+            possible_values = self.belief_model.beliefs[self.my_player_id][position]
+            if len(possible_values) == 1:
+                certain_values.add(list(possible_values)[0])
+        
+        return certain_values
+    
+    def suggest_call(self) -> Optional[Tuple[int, int, Union[int, float]]]:
+        """
+        Suggest the best call to make based on current beliefs.
+        
+        Strategy:
+        1. Filter for values that this player has
+        2. Find certain calls (belief set size = 1)
+        3. If no certain calls, return the call with minimum uncertainty
+        
+        Returns:
+            Tuple of (target_id, position, value) or None if no call available
+        """
+        my_values = self.get_certain_values()
+        if not my_values:
+            return None
+        
+        certain_calls = []
+        uncertain_calls = []
+        
+        for target_id in range(self.config.n_players):
+            if target_id == self.my_player_id:
+                continue
+            
+            for position in range(self.config.wires_per_player):
+                possible_values = self.belief_model.beliefs[target_id][position]
+                
+                for value in possible_values:
+                    if value not in my_values:
+                        continue
+                    
+                    if len(possible_values) == 1:
+                        certain_calls.append((target_id, position, value, 1))
+                    else:
+                        uncertain_calls.append((target_id, position, value, len(possible_values)))
+        
+        if certain_calls:
+            target_id, position, value, _ = certain_calls[0]
+            return (target_id, position, value)
+        
+        if uncertain_calls:
+            uncertain_calls.sort(key=lambda x: x[3])
+            target_id, position, value, _ = uncertain_calls[0]
+            return (target_id, position, value)
+        
+        return None
+    
+    def get_all_call_suggestions(self) -> Dict[str, List[Tuple[int, int, Union[int, float], int]]]:
+        """
+        Get all possible call suggestions organized by certainty level.
+        
+        Returns:
+            Dict with keys:
+            - 'certain': List of (target_id, position, value, 1)
+            - 'uncertain': List of (target_id, position, value, uncertainty) sorted by uncertainty
+        """
+        my_values = self.get_certain_values()
+        if not my_values:
+            return {'certain': [], 'uncertain': []}
+        
+        certain_calls = []
+        uncertain_calls = []
+        
+        for target_id in range(self.config.n_players):
+            if target_id == self.my_player_id:
+                continue
+            
+            for position in range(self.config.wires_per_player):
+                possible_values = self.belief_model.beliefs[target_id][position]
+                
+                for value in possible_values:
+                    if value not in my_values:
+                        continue
+                    
+                    if len(possible_values) == 1:
+                        certain_calls.append((target_id, position, value, 1))
+                    else:
+                        uncertain_calls.append((target_id, position, value, len(possible_values)))
+        
+        uncertain_calls.sort(key=lambda x: x[3])
+        
+        return {
+            'certain': certain_calls,
+            'uncertain': uncertain_calls
+        }
+    
+    def print_call_suggestions(self, player_names: Dict[int, str] = None):
+        """
+        Print all available call suggestions in a readable format.
+        
+        Args:
+            player_names: Optional dict mapping player IDs to names
+        """
+        suggestions = self.get_all_call_suggestions()
+        
+        my_name = player_names.get(self.my_player_id, f"Player {self.my_player_id}") if player_names else f"Player {self.my_player_id}"
+        
+        print(f"\n{'='*80}")
+        print(f"CALL SUGGESTIONS for {my_name}")
+        print(f"{'='*80}")
+        
+        my_values = self.get_certain_values()
+        print(f"\nYour values (can call): {sorted(my_values)}")
+        
+        # Print certain calls
+        certain = suggestions['certain']
+        if certain:
+            print(f"\n✓ CERTAIN CALLS ({len(certain)}):")
+            print("  These calls are GUARANTEED to be correct!")
+            for target_id, position, value, _ in certain[:10]:
+                target_name = player_names.get(target_id, f"Player {target_id}") if player_names else f"Player {target_id}"
+                print(f"    → Call {target_name}[{position+1}] = {value}")
+            if len(certain) > 10:
+                print(f"    ... and {len(certain) - 10} more certain calls")
+        else:
+            print(f"\n✓ CERTAIN CALLS: None available")
+        
+        # Print uncertain calls
+        uncertain = suggestions['uncertain']
+        if uncertain:
+            print(f"\n⚠️  UNCERTAIN CALLS ({len(uncertain)}):")
+            print("  These calls have some chance of being wrong")
+            
+            by_uncertainty = {}
+            for target_id, position, value, unc in uncertain:
+                if unc not in by_uncertainty:
+                    by_uncertainty[unc] = []
+                by_uncertainty[unc].append((target_id, position, value))
+            
+            for unc in sorted(by_uncertainty.keys())[:3]:
+                calls = by_uncertainty[unc]
+                probability = 1.0 / unc
+                print(f"\n  Uncertainty: {unc} possible values (probability: {probability:.1%})")
+                for target_id, position, value in calls[:5]:
+                    target_name = player_names.get(target_id, f"Player {target_id}") if player_names else f"Player {target_id}"
+                    print(f"    → Call {target_name}[{position+1}] = {value}")
+                if len(calls) > 5:
+                    print(f"    ... and {len(calls) - 5} more at this level")
+        else:
+            print(f"\n⚠️  UNCERTAIN CALLS: None available")
+        
+        # Print best suggestion
+        best = self.suggest_call()
+        if best:
+            target_id, position, value = best
+            target_name = player_names.get(target_id, f"Player {target_id}") if player_names else f"Player {target_id}"
+            is_certain = any(t == target_id and p == position and v == value 
+                           for t, p, v, _ in certain)
+            certainty_str = "CERTAIN" if is_certain else "BEST UNCERTAIN"
+            print(f"\n{'='*80}")
+            print(f"💡 RECOMMENDED CALL ({certainty_str}):")
+            print(f"   {my_name} → {target_name}[{position+1}] = {value}")
+            print(f"{'='*80}")
+        else:
+            print(f"\n{'='*80}")
+            print(f"⚠️  NO CALLS AVAILABLE")
+            print(f"   (You may not have values that match any known positions)")
+            print(f"{'='*80}")
+    
+    def print_statistics(self, player_names: Dict[int, str] = None):
+        """
+        Print comprehensive statistics for all players and the system.
+        
+        Args:
+            player_names: Optional dict mapping player IDs to names
+        """
+        print(f"\n{'='*80}")
+        print(f"GAME STATISTICS")
+        print(f"{'='*80}")
+        
+        # System-wide stats
+        sys_stats = self.get_system_statistics()
+        print(f"\n📊 System Overview:")
+        print(f"  Total Entropy: {sys_stats['total_entropy']:.2f} bits")
+        print(f"  Average Player Entropy: {sys_stats['avg_player_entropy']:.2f} bits")
+        print(f"  Overall Completion: {sys_stats['completion_percent']:.1f}%")
+        
+        most_uncertain = sys_stats['most_uncertain_player']
+        most_uncertain_name = player_names.get(most_uncertain, f"Player {most_uncertain}") if player_names else f"Player {most_uncertain}"
+        print(f"  Most Uncertain: {most_uncertain_name} ({sys_stats['player_entropies'][most_uncertain]:.2f} bits)")
+        
+        # Per-player stats
+        print(f"\n📈 Per-Player Statistics:")
+        for player_id in range(self.config.n_players):
+            player_name = player_names.get(player_id, f"Player {player_id}") if player_names else f"Player {player_id}"
+            stats = self.get_player_statistics(player_id)
+            
+            marker = "👤" if player_id == self.my_player_id else "  "
+            print(f"\n{marker} {player_name}:")
+            print(f"     Entropy: {stats['entropy']:.2f} bits (norm: {stats['entropy_normalized']:.2%})")
+            print(f"     Certain: {stats['certain_count']}/{self.config.wires_per_player} positions ({stats['progress_percent']:.1f}%)")
+            print(f"     Avg Possibilities: {stats['avg_possibilities']:.2f} per position")
+        
+        print(f"\n{'='*80}")
