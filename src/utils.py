@@ -179,22 +179,32 @@ def format_double_reveal_for_user(reveal_record, player_names: Dict[int, str] = 
     return f"{player_name} DOUBLE REVEAL positions {pos1_display} and {pos2_display} = {reveal_record.value}"
 
 
-def convert_swap_to_internal(swap: Tuple, player_names: Dict[int, str] = None) -> Tuple:
+def convert_swap_to_internal(swap: Tuple, player_names: Dict[int, str] = None, my_player_id: int = None) -> Tuple:
     """
     Convert a user-friendly swap format (1-indexed positions, optional names)
     to internal format (0-indexed positions, player IDs).
     
     Args:
-        swap: Tuple of (player1, player2, init_pos1, init_pos2, final_pos1, final_pos2)
+        swap: Tuple of (player1, player2, init_pos1, init_pos2, final_pos1, final_pos2, [received_value])
               - players can be names (str) or IDs (int)
               - positions are 1-indexed (user-friendly)
+              - received_value is OPTIONAL: the value received by the IRL player (my_player_id)
+                If provided and one of the players is my_player_id, this value will be used
         player_names: Optional dict mapping IDs to names {0: "Alice", 1: "Bob", ...}
+        my_player_id: Optional ID of the IRL player (needed to determine which player receives the value)
         
     Returns:
         Tuple of (player1_id, player2_id, init_pos1_0idx, init_pos2_0idx, 
-                  final_pos1_0idx, final_pos2_0idx)
+                  final_pos1_0idx, final_pos2_0idx, received_value_or_none)
     """
-    player1, player2, init_pos1, init_pos2, final_pos1, final_pos2 = swap
+    # Handle both 6-element and 7-element tuples
+    if len(swap) == 7:
+        player1, player2, init_pos1, init_pos2, final_pos1, final_pos2, received_value = swap
+    elif len(swap) == 6:
+        player1, player2, init_pos1, init_pos2, final_pos1, final_pos2 = swap
+        received_value = None
+    else:
+        raise ValueError(f"Swap tuple must have 6 or 7 elements, got {len(swap)}")
     
     # Create reverse mapping (name -> ID) if needed
     name_to_id = {}
@@ -220,6 +230,14 @@ def convert_swap_to_internal(swap: Tuple, player_names: Dict[int, str] = None) -
             except ValueError:
                 raise ValueError(f"Invalid player2: {player2}. Must be player name or ID.")
     
+    # Validate received_value is provided when IRL player is involved
+    if my_player_id is not None and received_value is None:
+        if int(player1) == my_player_id or int(player2) == my_player_id:
+            raise ValueError(
+                f"received_value is required when you (Player {my_player_id}) are involved in a swap. "
+                f"Format: (player1, player2, init_pos1, init_pos2, final_pos1, final_pos2, received_value)"
+            )
+    
     # Convert positions from 1-indexed to 0-indexed
     init_pos1_internal = init_pos1 - 1
     init_pos2_internal = init_pos2 - 1
@@ -227,7 +245,7 @@ def convert_swap_to_internal(swap: Tuple, player_names: Dict[int, str] = None) -
     final_pos2_internal = final_pos2 - 1
     
     return (int(player1), int(player2), init_pos1_internal, init_pos2_internal,
-            final_pos1_internal, final_pos2_internal)
+            final_pos1_internal, final_pos2_internal, received_value)
 
 
 def format_swap_for_user(swap_record, player_names: Dict[int, str] = None) -> str:
@@ -405,10 +423,23 @@ def run_irl_game_session(
     for swap in swaps:
         try:
             # Convert swap to internal format
-            internal_swap = convert_swap_to_internal(swap, player_names)
-            p1, p2, init1, init2, final1, final2 = internal_swap
+            internal_swap = convert_swap_to_internal(swap, player_names, my_player_id)
+            p1, p2, init1, init2, final1, final2, received_value = internal_swap
             
-            swap_record = game.swap_wires(p1, p2, init1, init2, final1, final2)
+            # If IRL player is involved and received_value is provided, override the wire value
+            if received_value is not None:
+                if p1 == my_player_id:
+                    # Player 1 is the IRL player - they know they received this value
+                    swap_record = game.swap_wires(p1, p2, init1, init2, final1, final2, 
+                                                 player1_received_value=received_value)
+                elif p2 == my_player_id:
+                    # Player 2 is the IRL player - they know they received this value
+                    swap_record = game.swap_wires(p2, p1, init2, init1, final2, final1,
+                                                 player2_received_value=received_value)
+
+            else:
+                swap_record = game.swap_wires(p1, p2, init1, init2, final1, final2)
+            
             swap_records.append(swap_record)
         except ValueError as e:
             swap_records.append(f"ERROR: {e}")

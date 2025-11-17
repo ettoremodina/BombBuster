@@ -50,7 +50,7 @@ class BeliefModel:
         
         # Initialize beliefs and apply initial constraints
         self._initialize_beliefs()
-        self._apply_position_value_constraints()
+        self._apply_uncertain_position_value_filter()
     
     def _initialize_value_trackers(self):
         """
@@ -80,49 +80,7 @@ class BeliefModel:
                 else:
                     # Other players - unknown, start with all possible values
                     self.beliefs[player_id][position] = set(self.config.wire_values)
-    
-    def _apply_position_value_constraints(self):
-        """
-        Apply position-based value constraints at initialization.
-        
-        High values cannot appear in early positions due to ordering.
-        Low values cannot appear in late positions due to ordering.
-        
-        This eliminates impossible value-position combinations based on:
-        - Wire ordering constraint (non-decreasing)
-        - Number of copies of each value (may vary per value)
-        - Number of wires per player (W)
-        """
-        W = self.config.wires_per_player
-        
-        # High values cannot appear too early
-        # For each value (from high to low): if we have W-copies positions before it,
-        # and 'copies' exist, then it can't appear in early positions
-        threshold = W
-        for value in sorted(self.config.wire_values, reverse=True):
-            copies = self.config.get_copies(value)
-            threshold -= copies
-            if threshold > 0:
-                # Eliminate this value from positions [0, threshold)
-                for pos in range(0, threshold):
-                    for player_id in range(self.config.n_players):
-                        if player_id != self.my_player_id:  # Don't modify own known wires
-                            self.beliefs[player_id][pos].discard(value)
-        
-        # Low values cannot appear too late
-        # For each value (from low to high): with copies, value cannot appear
-        # in positions >= threshold
-        threshold = 0
-        for value in sorted(self.config.wire_values):
-            copies = self.config.get_copies(value)
-            threshold += copies
-            if threshold < W:
-                # Eliminate this value from positions [threshold, W)
-                for pos in range(threshold, W):
-                    for player_id in range(self.config.n_players):
-                        if player_id != self.my_player_id:  # Don't modify own known wires
-                            self.beliefs[player_id][pos].discard(value)
-    
+ 
     def process_call(self, call_record: CallRecord):
         """
         Update beliefs based on a public call.
@@ -169,9 +127,9 @@ class BeliefModel:
         
         The swap involves:
         1. Removing wires from initial positions
-        2. Inserting swapped wires into final positions
-        3. Renumbering all positions to account for the changes
-        4. If the observing player is one of the swappers, they learn the value they received
+        2. Inserting swapped wires into final positions (in shortened list)
+        3. If the observing player is one of the swappers, they learn the value they received
+        4. Update value trackers to reflect position changes
         
         Args:
             swap_record: The swap to process
@@ -188,73 +146,144 @@ class BeliefModel:
         p2_init_beliefs = self.beliefs[p2_id][p2_init].copy()
         
         # If this player is involved in the swap, they know what they received
-        if self.my_player_id == p1_id and swap_record.player1_received_value is not None:
+        if self.my_player_id == p1_id and swap_record.player1_received_value is not None: 
             # This player is player1 and knows they received a specific value
-            p1_init_beliefs = {swap_record.player1_received_value}
-            # Update value tracker - they now have this value as certain (at final position)
-            self.value_trackers[swap_record.player1_received_value].add_certain(p1_id, p1_final)
+            p2_init_beliefs = {swap_record.player1_received_value}
         
         if self.my_player_id == p2_id and swap_record.player2_received_value is not None:
             # This player is player2 and knows they received a specific value
-            p2_init_beliefs = {swap_record.player2_received_value}
-            # Update value tracker - they now have this value as certain (at final position)
-            self.value_trackers[swap_record.player2_received_value].add_certain(p2_id, p2_final)
+            p1_init_beliefs = {swap_record.player2_received_value}
         
-        # Renumber positions for player1
-        self._renumber_positions_after_swap(p1_id, p1_init, p1_final, p2_init_beliefs)
+        # Update value trackers BEFORE changing beliefs structure
+        # We need to track which values are moving and update their positions
+        self._update_value_trackers_for_swap(p1_id, p1_init, p1_final, p2_id, p2_init, p2_final)
         
-        # Renumber positions for player2
-        self._renumber_positions_after_swap(p2_id, p2_init, p2_final, p1_init_beliefs)
+        # Apply swap to player1: remove from init_pos1, insert at final_pos1
+        p1_beliefs_list = [self.beliefs[p1_id][pos].copy() for pos in range(len(self.beliefs[p1_id]))]
+        p1_beliefs_list.pop(p1_init)
+        p1_beliefs_list.insert(p1_final, p2_init_beliefs)
+        self.beliefs[p1_id] = {pos: belief_set for pos, belief_set in enumerate(p1_beliefs_list)}
+        
+        # Apply swap to player2: remove from init_pos2, insert at final_pos2
+        p2_beliefs_list = [self.beliefs[p2_id][pos].copy() for pos in range(len(self.beliefs[p2_id]))]
+        p2_beliefs_list.pop(p2_init)
+        p2_beliefs_list.insert(p2_final, p1_init_beliefs)
+        self.beliefs[p2_id] = {pos: belief_set for pos, belief_set in enumerate(p2_beliefs_list)}
         
         # Apply filters to deduce new information
         self.apply_filters()
     
-    def _renumber_positions_after_swap(self, player_id: int, removed_pos: int, 
-                                       inserted_pos: int, new_beliefs: Set):
+    def _update_value_trackers_for_swap(self, p1_id: int, p1_init: int, p1_final: int, 
+                                         p2_id: int, p2_init: int, p2_final: int):
         """
-        Renumber all positions for a player after a swap.
+        Update value trackers when a swap occurs.
         
-        Process:
-        1. Remove the wire at removed_pos
-        2. Shift all positions after removed_pos down by 1
-        3. Insert new wire at inserted_pos
-        4. Shift all positions at/after inserted_pos up by 1
+        When positions are swapped, we need to:
+        1. Update position references in revealed/certain lists for affected positions
+        2. Handle the case where positions shift due to removal/insertion
         
         Args:
-            player_id: Player whose positions are being renumbered
-            removed_pos: Position of wire that was removed
-            inserted_pos: Position where new wire is inserted
-            new_beliefs: Belief set for the newly inserted wire
+            p1_id: Player 1 ID
+            p1_init: Player 1 initial position
+            p1_final: Player 1 final position
+            p2_id: Player 2 ID
+            p2_init: Player 2 initial position
+            p2_final: Player 2 final position
         """
-        # Create a temporary dict to store the renumbered beliefs
-        old_beliefs = self.beliefs[player_id]
-        new_position_map = {}
-        
-        # Step 1: Remove the wire at removed_pos and shift subsequent positions down
-        for old_pos in range(len(old_beliefs)):
-            if old_pos < removed_pos:
-                # Positions before removal stay the same
-                new_position_map[old_pos] = old_beliefs[old_pos].copy()
-            elif old_pos > removed_pos:
-                # Positions after removal shift down by 1
-                new_position_map[old_pos - 1] = old_beliefs[old_pos].copy()
-            # old_pos == removed_pos is skipped (wire removed)
-        
-        # Step 2: Insert new wire at inserted_pos and shift subsequent positions up
-        final_beliefs = {}
-        for pos in range(len(old_beliefs)):
-            if pos < inserted_pos:
-                # Positions before insertion stay the same
-                final_beliefs[pos] = new_position_map.get(pos, set(self.config.wire_values))
-            elif pos == inserted_pos:
-                # The newly inserted wire gets the swapped beliefs
-                final_beliefs[pos] = new_beliefs.copy()
-            else:  # pos > inserted_pos
-                # Positions at/after insertion shift up by 1
-                final_beliefs[pos] = new_position_map.get(pos - 1, set(self.config.wire_values))
-        
-        # Update the beliefs for this player
-        self.beliefs[player_id] = final_beliefs
+        # For each value tracker, update positions affected by the swap
+        for value, tracker in self.value_trackers.items():
+            # Update player 1's positions
+            # Build new revealed list with updated positions
+            new_revealed = []
+            for pid, pos in tracker.revealed:
+                if pid == p1_id:
+                    # This player's positions need to be adjusted
+                    if pos == p1_init:
+                        # The swapped position moves to the final position
+                        continue  # This wire is leaving, don't track it anymore for this player
+                    elif pos > p1_init:
+                        # Positions after the removed wire shift down
+                        new_pos = pos - 1
+                        if new_pos >= p1_final:
+                            # If after the insertion point, shift up
+                            new_pos += 1
+                        new_revealed.append((pid, new_pos))
+                    else:
+                        # Position before the swap
+                        if pos >= p1_final:
+                            # At or after insertion point, shift up
+                            new_revealed.append((pid, pos + 1))
+                        else:
+                            new_revealed.append((pid, pos))
+                else:
+                    # Different player, keep as is
+                    new_revealed.append((pid, pos))
+            
+            # Update player 2's positions similarly
+            new_revealed_p2 = []
+            for pid, pos in new_revealed:
+                if pid == p2_id:
+                    if pos == p2_init:
+                        # The swapped position moves to the final position
+                        continue  # This wire is leaving, don't track it anymore for this player
+                    elif pos > p2_init:
+                        # Positions after the removed wire shift down
+                        new_pos = pos - 1
+                        if new_pos >= p2_final:
+                            # If after the insertion point, shift up
+                            new_pos += 1
+                        new_revealed_p2.append((pid, new_pos))
+                    else:
+                        # Position before the swap
+                        if pos >= p2_final:
+                            # At or after insertion point, shift up
+                            new_revealed_p2.append((pid, pos + 1))
+                        else:
+                            new_revealed_p2.append((pid, pos))
+                else:
+                    # Different player, keep as is
+                    new_revealed_p2.append((pid, pos))
+            
+            tracker.revealed = new_revealed_p2
+            
+            # Do the same for certain positions
+            new_certain = []
+            for pid, pos in tracker.certain:
+                if pid == p1_id:
+                    if pos == p1_init:
+                        continue  # This wire is leaving
+                    elif pos > p1_init:
+                        new_pos = pos - 1
+                        if new_pos >= p1_final:
+                            new_pos += 1
+                        new_certain.append((pid, new_pos))
+                    else:
+                        if pos >= p1_final:
+                            new_certain.append((pid, pos + 1))
+                        else:
+                            new_certain.append((pid, pos))
+                else:
+                    new_certain.append((pid, pos))
+            
+            new_certain_p2 = []
+            for pid, pos in new_certain:
+                if pid == p2_id:
+                    if pos == p2_init:
+                        continue  # This wire is leaving
+                    elif pos > p2_init:
+                        new_pos = pos - 1
+                        if new_pos >= p2_final:
+                            new_pos += 1
+                        new_certain_p2.append((pid, new_pos))
+                    else:
+                        if pos >= p2_final:
+                            new_certain_p2.append((pid, pos + 1))
+                        else:
+                            new_certain_p2.append((pid, pos))
+                else:
+                    new_certain_p2.append((pid, pos))
+            
+            tracker.certain = new_certain_p2
     
     def _process_successful_call(self, call: CallRecord):
         """
@@ -315,12 +344,12 @@ class BeliefModel:
             if self._apply_distance_filter():
                 changed = True
             
-            # Apply subset cardinality filter
-            if self._apply_subset_cardinality_filter():
-                changed = True
-            
             # # Apply uncertain position-value constraint filter
             if self._apply_uncertain_position_value_filter():
+                changed = True
+
+            # Apply subset cardinality filter
+            if self._apply_subset_cardinality_filter():
                 changed = True
             
             # If no changes, we've reached a fixed point
@@ -612,12 +641,30 @@ class BeliefModel:
                 
                 player_adjustments[player_id][value] = uncertain_for_player
         
-        # High values with few uncertain copies cannot appear too early
+        # STEP 1: Existence filter - if a player has 0 copies of a value, remove it from all positions
+        for player_id in range(self.config.n_players):
+            for value in self.config.wire_values:
+                uncertain_copies = player_adjustments[player_id][value]
+                
+                if uncertain_copies == 0:
+                    # This player has 0 copies of this value - eliminate from ALL positions
+                    for pos in range(W):
+                        before_size = len(self.beliefs[player_id][pos])
+                        self.beliefs[player_id][pos].discard(value)
+                        if len(self.beliefs[player_id][pos]) < before_size:
+                            changed = True
+        
+        # STEP 2: Position constraints - high values with few uncertain copies cannot appear too early
         # Build threshold: position before which this value cannot appear
         for player_id in range(self.config.n_players):
             threshold = W
             for value in sorted(self.config.wire_values, reverse=True):
                 uncertain_copies = player_adjustments[player_id][value]
+                
+                # Skip zero-copy case (already handled by existence filter)
+                if uncertain_copies == 0:
+                    continue
+                
                 threshold -= uncertain_copies
                 
                 # Clamp threshold to valid range [0, W)
@@ -630,12 +677,17 @@ class BeliefModel:
                             if len(self.beliefs[player_id][pos]) < before_size:
                                 changed = True
         
-        # Low values with few uncertain copies cannot appear too late
+        # STEP 3: Position constraints - low values with few uncertain copies cannot appear too late
         # Build threshold: position after which this value cannot appear
         for player_id in range(self.config.n_players):
             threshold = 0
             for value in sorted(self.config.wire_values):
                 uncertain_copies = player_adjustments[player_id][value]
+                
+                # Skip zero-copy case (already handled by existence filter)
+                if uncertain_copies == 0:
+                    continue
+                
                 threshold += uncertain_copies
                 
                 # Clamp threshold to valid range (0, W]
@@ -790,10 +842,16 @@ class BeliefModel:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict, observation: GameObservation, config: GameConfig) -> "BeliefModel":
+    def from_dict(cls, data: Dict, observation: GameObservation, config: GameConfig, player_names: Dict[int, str] = None) -> "BeliefModel":
         """Restore a BeliefModel from a dict. Requires the observation and config to
         create a proper instance (independence preserved) and then override internal
         state with the saved data.
+        
+        Args:
+            data: Serialized belief model data
+            observation: GameObservation for this player
+            config: Game configuration
+            player_names: Optional dict mapping player IDs to names for deserializing value trackers
         """
         bm = cls(observation, config)
 
@@ -815,7 +873,7 @@ class BeliefModel:
                 val = float(val_str)
             # Get total from config
             total = config.wire_distribution.get(val, 0)
-            bm.value_trackers[val] = ValueTracker.from_dict(vt_dict, val, total)
+            bm.value_trackers[val] = ValueTracker.from_dict(vt_dict, val, total, player_names)
 
         return bm
 
@@ -859,7 +917,7 @@ class BeliefModel:
 
         # Write value trackers separately for readability
         vt_file = player_dir / "value_tracker.json"
-        vt_serialized = {str(v): t.to_dict() for v, t in self.value_trackers.items()}
+        vt_serialized = {str(v): t.to_dict(player_names) for v, t in self.value_trackers.items()}
         with vt_file.open("w", encoding="utf-8") as fh:
             json.dump(vt_serialized, fh, indent=2)
 
@@ -882,6 +940,10 @@ class BeliefModel:
         
         # Extract player names if available (for reference, not used in loading)
         player_names = belief_data.get("player_names", {})
+        
+        # Convert string keys to int keys if needed
+        if player_names:
+            player_names = {int(k): v for k, v in player_names.items()}
         
         # Parse beliefs - handle both old format (just ID) and new format (ID_Name)
         beliefs_dict = {}
@@ -906,4 +968,4 @@ class BeliefModel:
             "value_trackers": vt_data,
         }
         
-        return cls.from_dict(combined_data, observation, config)
+        return cls.from_dict(combined_data, observation, config, player_names)

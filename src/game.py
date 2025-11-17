@@ -231,7 +231,9 @@ class Game:
     
     def swap_wires(self, player1_id: int, player2_id: int, 
                    init_pos1: int, init_pos2: int,
-                   final_pos1: int, final_pos2: int) -> SwapRecord:
+                   final_pos1: int, final_pos2: int,
+                   player1_received_value: Optional[Union[int, float]] = None,
+                   player2_received_value: Optional[Union[int, float]] = None) -> SwapRecord:
         """
         Process a wire swap between two players.
         Players exchange wires which are then inserted into their sorted positions.
@@ -241,8 +243,10 @@ class Game:
             player2_id: ID of second player
             init_pos1: Initial position in player1's wire (0-indexed)
             init_pos2: Initial position in player2's wire (0-indexed)
-            final_pos1: Final position where player1 receives the wire (0-indexed)
-            final_pos2: Final position where player2 receives the wire (0-indexed)
+            final_pos1: Final position where player1 receives the wire (0-indexed, in shortened list)
+            final_pos2: Final position where player2 receives the wire (0-indexed, in shortened list)
+            player1_received_value: Optional value that player1 received (for IRL override)
+            player2_received_value: Optional value that player2 received (for IRL override)
         
         Returns:
             SwapRecord with the result
@@ -261,13 +265,20 @@ class Game:
         value_from_p1 = player1.wire[init_pos1]
         value_from_p2 = player2.wire[init_pos2]
         
+        # Use provided received values if specified (IRL mode), otherwise use swapped values
+        value_p1_receives = player1_received_value if player1_received_value is not None else value_from_p2
+        value_p2_receives = player2_received_value if player2_received_value is not None else value_from_p1
+        
         # Remove wires from their initial positions
         player1.wire.pop(init_pos1)
         player2.wire.pop(init_pos2)
         
-        # Insert wires into final positions (maintaining sorted order)
-        player1.wire.insert(final_pos1, value_from_p2)
-        player2.wire.insert(final_pos2, value_from_p1)
+        # Insert received wires into final positions (in the shortened lists)
+        final_pos1 = final_pos1 if final_pos1 <= init_pos1 else final_pos1 - 1
+        final_pos2 = final_pos2 if final_pos2 <= init_pos2 else final_pos2 - 1
+        
+        player1.wire.insert(final_pos1, value_p1_receives)
+        player2.wire.insert(final_pos2, value_p2_receives)
         
         # Create swap record with values (both players know what they received)
         swap_record = SwapRecord(
@@ -277,8 +288,8 @@ class Game:
             player2_init_pos=init_pos2,
             player1_final_pos=final_pos1,
             player2_final_pos=final_pos2,
-            player1_received_value=value_from_p2,
-            player2_received_value=value_from_p1,
+            player1_received_value=value_p1_receives,
+            player2_received_value=value_p2_receives,
             turn_number=self.current_turn
         )
         
@@ -345,14 +356,17 @@ class Game:
             value_from_p1 = player1.wire[init_pos1]
             value_from_p2 = player2.wire[init_pos2]
             
+            # Simulate the swap to validate sorting
             # Check if inserting value_from_p2 at final_pos1 maintains order for player1
-            temp_wire1 = player1.wire[:init_pos1] + player1.wire[init_pos1+1:]
+            temp_wire1 = player1.wire.copy()
+            temp_wire1.pop(init_pos1)
             temp_wire1.insert(final_pos1, value_from_p2)
             if temp_wire1 != sorted(temp_wire1):
                 raise ValueError(f"Player1 final position {final_pos1} would break sorting")
             
             # Check if inserting value_from_p1 at final_pos2 maintains order for player2
-            temp_wire2 = player2.wire[:init_pos2] + player2.wire[init_pos2+1:]
+            temp_wire2 = player2.wire.copy()
+            temp_wire2.pop(init_pos2)
             temp_wire2.insert(final_pos2, value_from_p1)
             if temp_wire2 != sorted(temp_wire2):
                 raise ValueError(f"Player2 final position {final_pos2} would break sorting")

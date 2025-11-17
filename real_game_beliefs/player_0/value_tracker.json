@@ -1,29 +1,20 @@
 {
   "1": {
-    "revealed": [
-      [
-        1,
-        1
-      ],
-      [
-        0,
-        0
-      ]
-    ],
+    "revealed": [],
     "certain": [
       [
-        1,
+        "Alice",
         0
       ]
     ],
     "called": [],
-    "uncertain": "1/4"
+    "uncertain": "3/4"
   },
   "2": {
     "revealed": [],
     "certain": [
       [
-        0,
+        "Alice",
         1
       ]
     ],
@@ -40,7 +31,7 @@
     "revealed": [],
     "certain": [
       [
-        0,
+        "Alice",
         2
       ]
     ],
@@ -51,7 +42,7 @@
     "revealed": [],
     "certain": [
       [
-        0,
+        "Alice",
         3
       ]
     ],
@@ -68,7 +59,7 @@
     "revealed": [],
     "certain": [
       [
-        0,
+        "Alice",
         4
       ]
     ],
@@ -79,7 +70,7 @@
     "revealed": [],
     "certain": [
       [
-        0,
+        "Alice",
         5
       ]
     ],
@@ -90,7 +81,7 @@
     "revealed": [],
     "certain": [
       [
-        0,
+        "Alice",
         6
       ]
     ],
@@ -101,7 +92,7 @@
     "revealed": [],
     "certain": [
       [
-        0,
+        "Alice",
         7
       ]
     ],
@@ -112,7 +103,7 @@
     "revealed": [],
     "certain": [
       [
-        0,
+        "Alice",
         8
       ]
     ],
@@ -120,15 +111,24 @@
     "uncertain": "3/4"
   },
   "10": {
-    "revealed": [],
+    "revealed": [
+      [
+        "Charlie",
+        8
+      ],
+      [
+        "Charlie",
+        9
+      ]
+    ],
     "certain": [
       [
-        0,
+        "Alice",
         9
       ]
     ],
     "called": [],
-    "uncertain": "3/4"
+    "uncertain": "1/4"
   },
   "11": {
     "revealed": [],

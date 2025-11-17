@@ -141,6 +141,7 @@ the wire in init_pos1 ends un in final_pos1, same for 2
 The player that make the exchange will obviusly know which value they receive, since they can see it, hence it will become certain
 The other players will update their belief system by swapping the belief of the wires, and then applying the filter loop to make it consistent with the new placement in the players' decks
 Keep in mind the ordering, I don't know how it can be handled since I am using a dictionary, but it needs to update all positions
+in IRL I need to specify which value I am receiving when I am the player that is receiving the wire
 
 ## better differentiation certain vs revealed (easy)
 - in the print function, and in the data structure
@@ -154,19 +155,17 @@ For now keep it real simple, I'll add more statistics and suggesters later
 
 # TO DO
 
-## swaps 
-don't work irl (I need to specify which value I am receiving when I am the player that is receiving the wire)
+## DEBUG value tracker update on swap (hard)
+
+## swap extra info
+- if I receive a wire, not only I know its value but also it's past position, this can be extra information for filtering, very hard to implement
+- what I need is a backward tracking of some sort, think about it
+- Thinking more about it, I am not sure is needed.
+
 
 ## CHECK ALL FILTERS INDIVIDUALLY
-- uncertain has to include self calls too
-
-## value tracker json has id and not names (easy)
-
-## no one keeps 4 wires filter 
-- very difficult to implement, but the idea is to reduce the possibility that 4 copies of a wire belong to the same player, this changes a lot of filters
-### drop 4 function
-
-
+- _apply_subset_cardinality_filter (difficult to test)
+- _apply_uncertain_position_value_filter (seems okay but needs more testing)
 
 
 # Future Ideass
@@ -176,6 +175,10 @@ don't work irl (I need to specify which value I am receiving when I am the playe
 
 ## check markovian assumption
 then in case calls, swaps, double reveals in order
+
+## no one keeps 4 wires filter 
+- very difficult to implement, but the idea is to reduce the possibility that 4 copies of a wire belong to the same player, this changes a lot of filters
+### drop 4 function
 
 ## multipliers (easy and hard, future implementation)
 - I don't know which they are targeting, if as meta I always choose the left one than it works fine
@@ -190,3 +193,11 @@ then in case calls, swaps, double reveals in order
   - this could be an intersting way to check the completness of my approach, if I find that some values end up in impossible games than that means that a filtering function can be implemented
 
 
+# Notes
+- some cases could be filtered further, not because they are special case but because they would fall on unresonable strategy
+ - for example if a player has 4 copies it would drop all of them
+   - if a player has 3 certain, it cannot be that it has the fourth too
+ - it would be nice in the future to understand this cases broadly and refine the filtering accordingly, but it requires testing and trying
+
+## swapping is extra hard in automatic mode
+- I need to pass the final position, but it needs to be called by the player receiving the wire and has to be consistent with the ordering

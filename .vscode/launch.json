@@ -13,7 +13,7 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Debug test_serialization",
+            "name": "IRL",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/play_irl.py",

@@ -53,74 +53,57 @@ PLAYER_NAMES = {
 BELIEF_FOLDER = "real_game_beliefs"
 
 # Control saving and loading of beliefs and value tracker
-SAVE_TO_JSON = False   # Set to False to disable saving beliefs to JSON files
-LOAD_FROM_JSON = True  # Set to False to start fresh (ignore existing JSON files)
+SAVE_TO_JSON = True   # Set to False to disable saving beliefs to JSON files
+LOAD_FROM_JSON = False  # Set to False to start fresh (ignore existing JSON files)
 
 # ============================================================================
 # CALL HISTORY - Add calls here as they happen
 # ============================================================================
 # Format: (caller, target, position, value, success, [caller_position])
-# 
-# EASY FORMAT (recommended):
-#   - Use player names from PLAYER_NAMES (or IDs as integers)
-#   - Positions are 1-indexed (1, 2, 3, ...) - easier to count!
-#   - caller_position is OPTIONAL - only for successful calls to reveal caller's wire position
-#   - Example: ("Alice", "Bob", 3, 5, True, 2) = Alice calls Bob[3] = 5, SUCCESS, Alice has 5 at position 2
-#   - Example: ("Alice", "Bob", 3, 5, True) = Alice calls Bob[3] = 5, SUCCESS (caller position not revealed)
-#   - Example: (0, 1, 3, 5, False) = Player 0 calls Player 1[3] = 5, FAIL
-#
-# The script automatically converts to internal format (0-indexed)
 
 CALLS = [
-    # Add your calls here
-    # ("Alice", "Bob", 5, 3, True, 3),      # Alice calls Bob position 5 = 3, SUCCESS
-    # ("Bob", "Charlie", 5, 4, True, 6),    # Bob calls Charlie position 5 = 4, SUCCESS
-    # ("Alice", "Bob", 2, 1, True, 1),   # Bob calls Charlie position 5 = 6, FAIL
-    ("Alice", "Bob", 5, 7, True, 7),   # Alice calls Bob[3] = 7, SUCCESS, Alice has 7 at position 4
-
+    # ("Charlie", "Bob", 5, 8, True, ),     
+    # ("Alice", "Bob", 7, 8, True, 8),     
 ]
 
 # ============================================================================
-# DOUBLE REVEALS - Add double reveals here (optional)
+# DOUBLE REVEALS - Add double reveals here 
 # ============================================================================
+# If I want to drop 4, just call the function twice
 # Format: (player, value, position1, position2)
-#
-# Use this when a player reveals the last 2 copies of a value at once
-# 
-# EASY FORMAT (recommended):
-#   - Use player names from PLAYER_NAMES (or IDs as integers)
-#   - Positions are 1-indexed (1, 2, 3, ...) - easier to count!
-#   - Example: ("Alice", 5, 3, 7) = Alice reveals positions 3 and 7 both have value 5
-#   - Example: (0, 5, 3, 7) = Player 0 reveals positions 3 and 7 both have value 5
-#
-# The script automatically converts to internal format (0-indexed)
 
 DOUBLE_REVEALS = [
-    # Add your double reveals here (optional)
-    ("Bob", 12, 9, 10),  # Bob reveals last 2 copies of value 12
+    ("Charlie", 10, 9, 10),  # Charlie reveals last 2 copies of value 12
 ]
 
 # ============================================================================
 # WIRE SWAPS - Add swaps here (optional)
 # ============================================================================
-# Format: (player1, player2, init_pos1, init_pos2, final_pos1, final_pos2)
+# Format: (player1, player2, init_pos1, init_pos2, final_pos1, final_pos2, received_value)
 #
 # Use this when two players exchange wires
 # 
+# IMPORTANT: received_value is REQUIRED if you (MY_PLAYER_ID) are one of the players!
+#            This is the value YOU received from the swap (you can see it)
+#
 # EASY FORMAT (recommended):
 #   - Use player names from PLAYER_NAMES (or IDs as integers)
 #   - Positions are 1-indexed (1, 2, 3, ...) - easier to count!
 #   - init_pos: position of wire being given away
 #   - final_pos: position where received wire is inserted (after sorting)
-#   - Example: ("Alice", "Bob", 5, 3, 4, 6)
-#     Alice gives position 5, receives wire inserted at position 4
-#     Bob gives position 3, receives wire inserted at position 6
+#   - received_value: the value YOU received (required if you're involved)
+#   
+#   Example: ("Alice", "Bob", 5, 3, 4, 6, 7)
+#     If YOU are Alice: You give position 5, receive value 7 inserted at position 4
+#     If YOU are Bob: Bob gives position 3, receives wire inserted at position 6
+#   
+#   Example: ("Charlie", "Diana", 2, 8, 3, 7)
+#     Neither player is you, so received_value is optional (can be omitted)
 #
 # The script automatically converts to internal format (0-indexed)
 
 SWAPS = [
-    # Add your swaps here (optional)
-    # ("Alice", "Bob", 5, 3, 4, 6),
+    # ("Alice", "Bob", 5, 4, 5, 7, 6),  # You (Alice) receive value 8
 ]
 
 # ============================================================================

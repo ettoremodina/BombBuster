@@ -269,39 +269,74 @@ class ValueTracker:
                 f"revealed={self.revealed}, certain={self.certain}, "
                 f"called={self.called}, uncertain={self.get_uncertain_count()})")
 
-    def to_dict(self) -> Dict:
-        """Serialize the ValueTracker to a JSON-serializable dict."""
+    def to_dict(self, player_names: Dict[int, str] = None) -> Dict:
+        """Serialize the ValueTracker to a JSON-serializable dict.
+        
+        Args:
+            player_names: Optional dict mapping player IDs to names {0: "Alice", 1: "Bob", ...}
+                         If provided, player IDs will be replaced with names in the output
+        """
+        def format_player(player_id: int) -> Union[str, int]:
+            """Convert player ID to name if available, otherwise return ID."""
+            if player_names and player_id in player_names:
+                return player_names[player_id]
+            return player_id
+        
+        def format_position_tuple(player_id: int, position: int) -> List:
+            """Format a (player_id, position) tuple with name if available."""
+            return [format_player(player_id), position]
+        
         return {
-            "revealed": list(self.revealed),
-            "certain": list(self.certain),
-            "called": list(self.called),
+            "revealed": [format_position_tuple(p, pos) for p, pos in self.revealed],
+            "certain": [format_position_tuple(p, pos) for p, pos in self.certain],
+            "called": [format_player(p) for p in self.called],
             "uncertain": f"{self.get_uncertain_count()}/{self.total}"
         }
 
     @classmethod
-    def from_dict(cls, data: Dict, value: int, total: int) -> "ValueTracker":
+    def from_dict(cls, data: Dict, value: int, total: int, player_names: Dict[int, str] = None) -> "ValueTracker":
         """Create a ValueTracker from a dict produced by to_dict().
         
         Args:
             data: Dict with revealed, certain, called lists
             value: The value this tracker represents
             total: Total number of copies in the game
+            player_names: Optional dict mapping player IDs to names, used to convert names back to IDs
         """
         vt = cls(value, total)
         
-        # Convert lists back to proper format
-        # Handle both old format (just player_ids) and new format (tuples)
+        # Create reverse mapping from names to IDs if player_names provided
+        name_to_id = {}
+        if player_names:
+            name_to_id = {name: pid for pid, name in player_names.items()}
+        
+        def parse_player(player_identifier: Union[str, int]) -> int:
+            """Convert player name or ID to integer ID."""
+            if isinstance(player_identifier, int):
+                return player_identifier
+            elif isinstance(player_identifier, str):
+                # Try to convert name to ID
+                if player_identifier in name_to_id:
+                    return name_to_id[player_identifier]
+                # Fallback: try to parse as integer
+                try:
+                    return int(player_identifier)
+                except ValueError:
+                    raise ValueError(f"Unknown player name: {player_identifier}")
+            else:
+                raise TypeError(f"Invalid player identifier type: {type(player_identifier)}")
         
         # revealed: convert to list of tuples
         revealed_data = data.get("revealed", [])
         vt.revealed = []
         for item in revealed_data:
             if isinstance(item, (list, tuple)) and len(item) == 2:
-                # New format: [player_id, position] or (player_id, position)
-                vt.revealed.append(tuple(item))
+                # Format: [player_identifier, position]
+                player_id = parse_player(item[0])
+                position = int(item[1])
+                vt.revealed.append((player_id, position))
             elif isinstance(item, int):
                 # Old format: just player_id (position unknown, treat as invalid/skip)
-                # We can't convert old format properly, so skip these entries
                 pass
         
         # certain: convert to list of tuples
@@ -309,14 +344,19 @@ class ValueTracker:
         vt.certain = []
         for item in certain_data:
             if isinstance(item, (list, tuple)) and len(item) == 2:
-                # New format: [player_id, position] or (player_id, position)
-                vt.certain.append(tuple(item))
+                # Format: [player_identifier, position]
+                player_id = parse_player(item[0])
+                position = int(item[1])
+                vt.certain.append((player_id, position))
             elif isinstance(item, int):
                 # Old format: just player_id (position unknown, treat as invalid/skip)
-                # We can't convert old format properly, so skip these entries
                 pass
         
-        # called is just a list of player IDs (unchanged)
-        vt.called = list(data.get("called", []))
+        # called: list of player identifiers (names or IDs)
+        called_data = data.get("called", [])
+        vt.called = []
+        for player_identifier in called_data:
+            player_id = parse_player(player_identifier)
+            vt.called.append(player_id)
         
         return vt
