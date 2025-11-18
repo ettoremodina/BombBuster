@@ -426,18 +426,21 @@ def run_irl_game_session(
             internal_swap = convert_swap_to_internal(swap, player_names, my_player_id)
             p1, p2, init1, init2, final1, final2, received_value = internal_swap
             
-            # If IRL player is involved and received_value is provided, override the wire value
+            # Normalize: In IRL mode, always put the IRL player (my_player_id) as player1
+            # This simplifies the logic in belief_model.py
             if received_value is not None:
-                if p1 == my_player_id:
-                    # Player 1 is the IRL player - they know they received this value
-                    swap_record = game.swap_wires(p1, p2, init1, init2, final1, final2, 
-                                                 player1_received_value=received_value)
-                elif p2 == my_player_id:
-                    # Player 2 is the IRL player - they know they received this value
-                    swap_record = game.swap_wires(p2, p1, init2, init1, final2, final1,
-                                                 player2_received_value=received_value)
-
+                if p2 == my_player_id:
+                    # Swap players and positions so IRL player is always player1
+                    p1, p2 = p2, p1
+                    init1, init2 = init2, init1
+                    final1, final2 = final2, final1
+                    # received_value stays the same - it's what the IRL player receives
+                
+                # Now IRL player is always player1
+                swap_record = game.swap_wires(p1, p2, init1, init2, final1, final2, 
+                                             player1_received_value=received_value)
             else:
+                # Simulation mode - no normalization needed
                 swap_record = game.swap_wires(p1, p2, init1, init2, final1, final2)
             
             swap_records.append(swap_record)
@@ -559,11 +562,6 @@ def print_belief_state(my_player, belief_folder: str, my_player_id: int, player_
     print("BELIEF STATE")
     print("="*80)
     my_player.belief_system.print_beliefs(player_names)
-    
-    # Print statistics
-    stats = GameStatistics(my_player.belief_system, config or my_player.config, my_player.get_wire())
-    stats.print_statistics(player_names)
-    
     # Check consistency
     if not my_player.belief_system.is_consistent():
         print("\n⚠️  WARNING: Belief state is INCONSISTENT! Some position has no possible values.")
@@ -572,6 +570,13 @@ def print_belief_state(my_player, belief_folder: str, my_player_id: int, player_
     print(f"\n💾 Belief state saved to {belief_folder}/")
     print(f"   📁 Files: {belief_folder}/player_{my_player_id}/belief.json")
     print(f"   📁 Files: {belief_folder}/player_{my_player_id}/value_tracker.json")
+    
+def print_statistics(my_player, player_names: Dict[int, str] = None, config: GameConfig = None):
+    # Print statistics
+    stats = GameStatistics(my_player.belief_system, config or my_player.config, my_player.get_wire())
+    stats.print_statistics(player_names)
+    
+  
 
 
 def print_session_complete(belief_folder: str):

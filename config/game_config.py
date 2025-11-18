@@ -9,7 +9,7 @@ Defines the wire distribution, number of players, and game constraints.
 WIRE_DISTRIBUTION = {
     **{i: 4 for i in range(1, 13)},  # Values 1-12 have 4 copies each
     2.5: 1,                           # Value 2.5 has 2 copies
-    4.5: 1                            # Value 4.5 has 2 copies
+    6.5: 1                            # Value 4.5 has 2 copies
 }
 
 N = 5  # Number of players (collaborative team)

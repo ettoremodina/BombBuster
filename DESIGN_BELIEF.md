@@ -157,10 +157,7 @@ For now keep it real simple, I'll add more statistics and suggesters later
 
 ## DEBUG value tracker update on swap (hard)
 
-## swap extra info
-- if I receive a wire, not only I know its value but also it's past position, this can be extra information for filtering, very hard to implement
-- what I need is a backward tracking of some sort, think about it
-- Thinking more about it, I am not sure is needed.
+
 
 
 ## CHECK ALL FILTERS INDIVIDUALLY
@@ -201,3 +198,19 @@ then in case calls, swaps, double reveals in order
 
 ## swapping is extra hard in automatic mode
 - I need to pass the final position, but it needs to be called by the player receiving the wire and has to be consistent with the ordering
+
+
+## swap extra info
+- if I receive a wire, not only I know its value but also it's past position, this can be extra information for filtering, very hard to implement
+- what I need is a backward tracking of some sort, think about it
+- Thinking more about it, I am not sure is needed.
+
+
+
+## Debugging Swap function in belief_model.py for the ValueTracker (_update_value_trackers_for_swap)
+Something is not working correctly, here I list the operations that I need to perform to have a successfull swap
+1. every player has to update the value tracker, not only the one involved in the switching
+2. Revealed wires cannot be swapped, but they change relative position
+   1. for each revealed value that belongs to either one of the players involved in the swap update the position that got change due to the swap
+3. If a certain value got exchanged than I need to update both player and pos
+4. The other certain values need to update the position due to the swap (as the revealed ones)

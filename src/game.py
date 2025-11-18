@@ -254,8 +254,9 @@ class Game:
         Raises:
             ValueError: If the swap is invalid
         """
-        # Validate the swap
-        self._validate_swap(player1_id, player2_id, init_pos1, init_pos2, final_pos1, final_pos2)
+        
+        final_pos1 = final_pos1 + 1 if final_pos1 >= init_pos1 else final_pos1
+        final_pos2 = final_pos2 + 1 if final_pos2 >= init_pos2 else final_pos2
         
         # Get the actual wires
         player1 = self.players[player1_id]
@@ -269,16 +270,20 @@ class Game:
         value_p1_receives = player1_received_value if player1_received_value is not None else value_from_p2
         value_p2_receives = player2_received_value if player2_received_value is not None else value_from_p1
         
-        # Remove wires from their initial positions
-        player1.wire.pop(init_pos1)
-        player2.wire.pop(init_pos2)
+        # Validate the swap
+        self._validate_swap(player1_id, player2_id, init_pos1, init_pos2, final_pos1, final_pos2)
+       
+        # Replace initial positions with None (keeps indexing stable)
+        player1.wire[init_pos1] = None
+        player2.wire[init_pos2] = None
         
-        # Insert received wires into final positions (in the shortened lists)
-        final_pos1 = final_pos1 if final_pos1 <= init_pos1 else final_pos1 - 1
-        final_pos2 = final_pos2 if final_pos2 <= init_pos2 else final_pos2 - 1
-        
+        # Insert received wires at final positions
         player1.wire.insert(final_pos1, value_p1_receives)
         player2.wire.insert(final_pos2, value_p2_receives)
+        
+        # Remove None values
+        player1.wire = [v for v in player1.wire if v is not None]
+        player2.wire = [v for v in player2.wire if v is not None]
         
         # Create swap record with values (both players know what they received)
         swap_record = SwapRecord(
@@ -343,10 +348,10 @@ class Game:
         
         # Check if final positions are valid
         # Note: After removing a wire, valid range is [0, wires_per_player-1]
-        if final_pos1 < 0 or final_pos1 >= self.config.wires_per_player:
-            raise ValueError(f"Invalid final_pos1: {final_pos1}")
-        if final_pos2 < 0 or final_pos2 >= self.config.wires_per_player:
-            raise ValueError(f"Invalid final_pos2: {final_pos2}")
+        # if final_pos1 < 0 or final_pos1 >= self.config.wires_per_player:
+        #     raise ValueError(f"Invalid final_pos1: {final_pos1}")
+        # if final_pos2 < 0 or final_pos2 >= self.config.wires_per_player:
+        #     raise ValueError(f"Invalid final_pos2: {final_pos2}")
         
         # When not in IRL mode, validate that final positions maintain sorted order
         if not self.config.playing_irl:
@@ -356,18 +361,20 @@ class Game:
             value_from_p1 = player1.wire[init_pos1]
             value_from_p2 = player2.wire[init_pos2]
             
-            # Simulate the swap to validate sorting
+            # Simulate the swap to validate sorting using the same None-replacement approach
             # Check if inserting value_from_p2 at final_pos1 maintains order for player1
             temp_wire1 = player1.wire.copy()
-            temp_wire1.pop(init_pos1)
+            temp_wire1[init_pos1] = None  # Replace with None instead of pop
             temp_wire1.insert(final_pos1, value_from_p2)
+            temp_wire1 = [v for v in temp_wire1 if v is not None]  # Remove None
             if temp_wire1 != sorted(temp_wire1):
                 raise ValueError(f"Player1 final position {final_pos1} would break sorting")
             
             # Check if inserting value_from_p1 at final_pos2 maintains order for player2
             temp_wire2 = player2.wire.copy()
-            temp_wire2.pop(init_pos2)
+            temp_wire2[init_pos2] = None  # Replace with None instead of pop
             temp_wire2.insert(final_pos2, value_from_p1)
+            temp_wire2 = [v for v in temp_wire2 if v is not None]  # Remove None
             if temp_wire2 != sorted(temp_wire2):
                 raise ValueError(f"Player2 final position {final_pos2} would break sorting")
     

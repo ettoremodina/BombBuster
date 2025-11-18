@@ -131,6 +131,8 @@ class BeliefModel:
         3. If the observing player is one of the swappers, they learn the value they received
         4. Update value trackers to reflect position changes
         
+        Note: In IRL mode, the IRL player (me) is always normalized to be player1 in utils.py
+        
         Args:
             swap_record: The swap to process
         """
@@ -141,149 +143,209 @@ class BeliefModel:
         p1_final = swap_record.player1_final_pos
         p2_final = swap_record.player2_final_pos
         
-        # Store the belief sets that are being swapped
+        # Store the belief sets that are being swapped (BEFORE any modifications)
+        # These are needed for updating value trackers
+        p1_init_beliefs_original = self.beliefs[p1_id][p1_init].copy()
+        p2_init_beliefs_original = self.beliefs[p2_id][p2_init].copy()
+        
         p1_init_beliefs = self.beliefs[p1_id][p1_init].copy()
         p2_init_beliefs = self.beliefs[p2_id][p2_init].copy()
         
         # If this player is involved in the swap, they know what they received
+        # In IRL mode, I'm always player1 (normalized in utils.py)
         if self.my_player_id == p1_id and swap_record.player1_received_value is not None: 
             # This player is player1 and knows they received a specific value
             p2_init_beliefs = {swap_record.player1_received_value}
         
         if self.my_player_id == p2_id and swap_record.player2_received_value is not None:
             # This player is player2 and knows they received a specific value
+            # (shouldn't happen in IRL mode due to normalization, but kept for completeness)
             p1_init_beliefs = {swap_record.player2_received_value}
         
         # Update value trackers BEFORE changing beliefs structure
         # We need to track which values are moving and update their positions
-        self._update_value_trackers_for_swap(p1_id, p1_init, p1_final, p2_id, p2_init, p2_final)
+        # Pass the original belief sets to determine which called values to remove
+        self._update_value_trackers_for_swap(swap_record, p1_init_beliefs_original, p2_init_beliefs_original)
         
         # Apply swap to player1: remove from init_pos1, insert at final_pos1
         p1_beliefs_list = [self.beliefs[p1_id][pos].copy() for pos in range(len(self.beliefs[p1_id]))]
-        p1_beliefs_list.pop(p1_init)
+        p1_beliefs_list[p1_init] = None
         p1_beliefs_list.insert(p1_final, p2_init_beliefs)
-        self.beliefs[p1_id] = {pos: belief_set for pos, belief_set in enumerate(p1_beliefs_list)}
+        k = 0
+        for belief_set in p1_beliefs_list:
+            if belief_set is not None:
+                self.beliefs[p1_id][k] = belief_set
+                k += 1
+
         
         # Apply swap to player2: remove from init_pos2, insert at final_pos2
         p2_beliefs_list = [self.beliefs[p2_id][pos].copy() for pos in range(len(self.beliefs[p2_id]))]
-        p2_beliefs_list.pop(p2_init)
+        p2_beliefs_list[p2_init] = None
         p2_beliefs_list.insert(p2_final, p1_init_beliefs)
-        self.beliefs[p2_id] = {pos: belief_set for pos, belief_set in enumerate(p2_beliefs_list)}
-        
+        k = 0
+        for belief_set in p2_beliefs_list:
+            if belief_set is not None:
+                self.beliefs[p2_id][k] = belief_set
+                k += 1
+
         # Apply filters to deduce new information
         self.apply_filters()
+
+    def calculate_new_position(self, player_id: int, old_pos: int, 
+                                swap_player_id: int, init_pos: int, final_pos: int) -> int:
+        """
+        Calculate new position after a swap for a given player.
+        
+        Swap mechanics: remove from init_pos, then insert at final_pos
+        """
+        if player_id != swap_player_id:
+            return old_pos  # No change for other players
+        
+        if old_pos < init_pos and old_pos< final_pos:
+            return old_pos  # No change
+        
+        elif old_pos > init_pos and old_pos > final_pos:
+            return old_pos  # No change
     
-    def _update_value_trackers_for_swap(self, p1_id: int, p1_init: int, p1_final: int, 
-                                         p2_id: int, p2_init: int, p2_final: int):
+        elif old_pos < init_pos and old_pos >= final_pos:
+            return old_pos + 1  # Shift right due to insertion
+        
+        elif old_pos > init_pos and old_pos <= final_pos:
+            return old_pos - 1  # Shift left due to removal
+        
+        elif old_pos == init_pos:
+            return final_pos  # This position is being exchanged
+        
+        elif old_pos == final_pos:
+            return init_pos  # This position is being exchanged
+        
+        else:
+            raise ValueError(f"Unhandled position case for old_pos={old_pos}, init_pos={init_pos}, final_pos={final_pos}")
+        
+    def _update_value_trackers_for_swap(self, swap_record: SwapRecord, 
+                                         p1_swapped_beliefs: Set[Union[int, float]], 
+                                         p2_swapped_beliefs: Set[Union[int, float]]):
         """
         Update value trackers when a swap occurs.
         
-        When positions are swapped, we need to:
-        1. Update position references in revealed/certain lists for affected positions
-        2. Handle the case where positions shift due to removal/insertion
+        Requirements:
+        1. ALL players need to update value tracker (both involved and not involved)
+        2. Revealed wires cannot be swapped, but they change relative position
+           - Update positions for revealed values belonging to swapping players
+        3. If a certain value got exchanged, update both player and position (swap them)
+        4. Other certain values need position updates due to the swap (like revealed ones)
+        5. In IRL mode: if I'm receiving a value, update the certain tracker with what I received
+        6. Remove both swappers from 'called' lists - but only for values that could have been
+           in the positions they swapped (check belief sets)
         
         Args:
-            p1_id: Player 1 ID
-            p1_init: Player 1 initial position
-            p1_final: Player 1 final position
-            p2_id: Player 2 ID
-            p2_init: Player 2 initial position
-            p2_final: Player 2 final position
+            swap_record: The swap record containing all swap information
+            p1_swapped_beliefs: The belief set for player1's swapped position (before swap)
+            p2_swapped_beliefs: The belief set for player2's swapped position (before swap)
         """
-        # For each value tracker, update positions affected by the swap
+        p1_id = swap_record.player1_id
+        p2_id = swap_record.player2_id
+        p1_init = swap_record.player1_init_pos
+        p2_init = swap_record.player2_init_pos
+        p1_final = swap_record.player1_final_pos
+        p2_final = swap_record.player2_final_pos
+
+        # Adjust final positions based on insertion point relative to initial position
+        if p2_final - 1 >= p2_init:
+            p2_final -= 1
+        if p1_final - 1 >= p1_init:
+            p1_final -= 1
+
+        # For each value tracker, update all positions
         for value, tracker in self.value_trackers.items():
-            # Update player 1's positions
-            # Build new revealed list with updated positions
+            # Update REVEALED positions
             new_revealed = []
             for pid, pos in tracker.revealed:
+                # Revealed wires CANNOT be swapped (game rule)
                 if pid == p1_id:
-                    # This player's positions need to be adjusted
-                    if pos == p1_init:
-                        # The swapped position moves to the final position
-                        continue  # This wire is leaving, don't track it anymore for this player
-                    elif pos > p1_init:
-                        # Positions after the removed wire shift down
-                        new_pos = pos - 1
-                        if new_pos >= p1_final:
-                            # If after the insertion point, shift up
-                            new_pos += 1
-                        new_revealed.append((pid, new_pos))
-                    else:
-                        # Position before the swap
-                        if pos >= p1_final:
-                            # At or after insertion point, shift up
-                            new_revealed.append((pid, pos + 1))
-                        else:
-                            new_revealed.append((pid, pos))
+                    # Other positions for player 1 - calculate new position
+                    new_pos = self.calculate_new_position(pid, pos, p1_id, p1_init, p1_final)
+                    new_revealed.append((pid, new_pos))
+
+                elif pid == p2_id:
+                    # Other positions for player 2 - calculate new position
+                    new_pos = self.calculate_new_position(pid, pos, p2_id, p2_init, p2_final)
+                    new_revealed.append((pid, new_pos))
+
                 else:
-                    # Different player, keep as is
+                    # Other players - no change
                     new_revealed.append((pid, pos))
             
-            # Update player 2's positions similarly
-            new_revealed_p2 = []
-            for pid, pos in new_revealed:
-                if pid == p2_id:
-                    if pos == p2_init:
-                        # The swapped position moves to the final position
-                        continue  # This wire is leaving, don't track it anymore for this player
-                    elif pos > p2_init:
-                        # Positions after the removed wire shift down
-                        new_pos = pos - 1
-                        if new_pos >= p2_final:
-                            # If after the insertion point, shift up
-                            new_pos += 1
-                        new_revealed_p2.append((pid, new_pos))
-                    else:
-                        # Position before the swap
-                        if pos >= p2_final:
-                            # At or after insertion point, shift up
-                            new_revealed_p2.append((pid, pos + 1))
-                        else:
-                            new_revealed_p2.append((pid, pos))
-                else:
-                    # Different player, keep as is
-                    new_revealed_p2.append((pid, pos))
+            tracker.revealed = new_revealed
             
-            tracker.revealed = new_revealed_p2
-            
-            # Do the same for certain positions
+            # Update CERTAIN positions
             new_certain = []
             for pid, pos in tracker.certain:
-                if pid == p1_id:
-                    if pos == p1_init:
-                        continue  # This wire is leaving
-                    elif pos > p1_init:
-                        new_pos = pos - 1
-                        if new_pos >= p1_final:
-                            new_pos += 1
-                        new_certain.append((pid, new_pos))
+                # Check if this certain value is being exchanged
+                if pid == p1_id and pos == p1_init:
+                    # This value is being swapped from p1 to p2
+                    # In IRL mode: if I'm player 2 and received a different value, skip this
+                    # (the correct value will be added after this loop)
+                    if self.config.playing_irl and self.my_player_id == p2_id and swap_record.player2_received_value is not None:
+                        # Skip - will be replaced with the actual received value
+                        continue
                     else:
-                        if pos >= p1_final:
-                            new_certain.append((pid, pos + 1))
-                        else:
-                            new_certain.append((pid, pos))
+                        new_certain.append((p2_id, p2_final))
+                        
+                elif pid == p2_id and pos == p2_init:
+                    # This value is being swapped from p2 to p1
+                    # In IRL mode: if I'm player 1 and received a different value, skip this
+                    # (the correct value will be added after this loop)
+                    if self.config.playing_irl and self.my_player_id == p1_id and swap_record.player1_received_value is not None:
+                        # Skip - will be replaced with the actual received value
+                        continue
+                    else:
+                        new_certain.append((p1_id, p1_final))
+                        
+                elif pid == p1_id:
+                    new_pos = self.calculate_new_position(pid, pos, p1_id, p1_init, p1_final)
+                    new_certain.append((pid, new_pos))
+    
+                elif pid == p2_id:
+                    # Other certain positions for player 2 - calculate new position
+                    new_pos = self.calculate_new_position(pid, pos, p2_id, p2_init, p2_final)
+                    new_certain.append((pid, new_pos))
+
                 else:
+                    # Other players - no change
                     new_certain.append((pid, pos))
             
-            new_certain_p2 = []
-            for pid, pos in new_certain:
-                if pid == p2_id:
-                    if pos == p2_init:
-                        continue  # This wire is leaving
-                    elif pos > p2_init:
-                        new_pos = pos - 1
-                        if new_pos >= p2_final:
-                            new_pos += 1
-                        new_certain_p2.append((pid, new_pos))
-                    else:
-                        if pos >= p2_final:
-                            new_certain_p2.append((pid, pos + 1))
-                        else:
-                            new_certain_p2.append((pid, pos))
-                else:
-                    new_certain_p2.append((pid, pos))
+            tracker.certain = new_certain
             
-            tracker.certain = new_certain_p2
+            # Update CALLED list - remove swappers only if this value could have been
+            # in the position they swapped (check belief sets)
+            new_called = set()
+            for pid in tracker.called:
+                should_keep = True
+                
+                # Check if player1 called this value and it was in their swapped position
+                if pid == p1_id and value in p1_swapped_beliefs:
+                    should_keep = False  # Remove from called - they might have swapped it away
+                
+                # Check if player2 called this value and it was in their swapped position
+                elif pid == p2_id and value in p2_swapped_beliefs:
+                    should_keep = False  # Remove from called - they might have swapped it away
+                
+                if should_keep:
+                    new_called.add(pid)
+            
+            tracker.called = new_called
+            
+        # In IRL mode: if I received a value, mark it as certain for me
+        # This replaces any value that was at the swap position
+        if self.config.playing_irl:
+            if self.my_player_id == p1_id and swap_record.player1_received_value is not None:
+                # I'm player 1 and I know what I received
+                self.value_trackers[swap_record.player1_received_value].add_certain(p1_id, p1_final)
+            
+            if self.my_player_id == p2_id and swap_record.player2_received_value is not None:
+                # I'm player 2 and I know what I received
+                self.value_trackers[swap_record.player2_received_value].add_certain(p2_id, p2_final)
     
     def _process_successful_call(self, call: CallRecord):
         """
@@ -326,7 +388,7 @@ class BeliefModel:
         This includes:
         - Ordering filter (monotonic constraint)
         - Subset cardinality matching (Sudoku-style)
-        - r_k filtering (TODO: implement later)
+        - r_k filtering (removed, redundant)
         
         Runs iteratively until no more changes occur.
         """
@@ -363,7 +425,7 @@ class BeliefModel:
             
         
         # After filtering, update ValueTracker for any newly certain positions
-        print(f"performed {iteration} loops of filters")
+        # print(f"performed {iteration} loops of filters")
         self._update_value_trackers()
     
     def _update_value_trackers(self):

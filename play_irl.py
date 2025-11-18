@@ -26,7 +26,8 @@ from src.utils import (
     print_game_state,
     print_player_info,
     print_belief_state,
-    print_session_complete
+    print_session_complete,
+    print_statistics
 )
 
 # ============================================================================
@@ -73,7 +74,7 @@ CALLS = [
 # Format: (player, value, position1, position2)
 
 DOUBLE_REVEALS = [
-    ("Charlie", 10, 9, 10),  # Charlie reveals last 2 copies of value 12
+    # ("Charlie", 10, 9, 10),  # Charlie reveals last 2 copies of value 12
 ]
 
 # ============================================================================
@@ -103,7 +104,9 @@ DOUBLE_REVEALS = [
 # The script automatically converts to internal format (0-indexed)
 
 SWAPS = [
-    # ("Alice", "Bob", 5, 4, 5, 7, 6),  # You (Alice) receive value 8
+    ("Alice", "Bob", 5, 4, 6, 7, 6.5), 
+    # Alice gives wire 5 at pos 5 (idx 4) to Bob in pos 7 (idx 6)
+    # Bob gives wire 6.5 at pos 4 (idx 3) to Alice in pos 6 (idx 5)
 ]
 
 # ============================================================================
@@ -168,9 +171,14 @@ def main():
     
     # Print belief state
     print_belief_state(my_player, BELIEF_FOLDER, MY_PLAYER_ID, player_names, config)
+
+    # Print statistics
+    # print_statistics(my_player, player_names, config)
     
     # Print session complete
     # print_session_complete(BELIEF_FOLDER)
+
+
 
 
 if __name__ == "__main__":
