@@ -32,7 +32,7 @@ class BombBusterGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("BombBuster - IRL Tracker")
-        self.root.geometry("1200x900")
+        self.root.state('zoomed')  # Open in full screen (maximized)
         
         # Load configuration from gui_config.py
         self.my_wire = MY_WIRE
@@ -113,59 +113,88 @@ class BombBusterGUI:
         # Action type selector
         self.setup_action_selector()
         
-        # Action panels container
-        self.action_container = tk.Frame(self.root)
-        self.action_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        # Scrollable container for action panels
+        container_frame = tk.Frame(self.root)
+        container_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.canvas = tk.Canvas(container_frame)
+        scrollbar = tk.Scrollbar(container_frame, orient="vertical", command=self.canvas.yview)
+        self.action_container = tk.Frame(self.canvas)
+        
+        self.action_container.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        
+        # Create window in canvas
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.action_container, anchor="nw")
+        
+        # Configure canvas to resize the window
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+        
+        # Mousewheel scrolling
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+        
+        self.canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
         
         # Create all action panels
         self.setup_action_panels()
-        
-        # Action log
-        self.setup_action_log()
         
         # Game state
         self.setup_game_state()
         
         # Show default panel
         self.switch_action_panel("call")
+
+    def _on_canvas_configure(self, event):
+        """Handle canvas resize to adjust inner frame width."""
+        self.canvas.itemconfig(self.canvas_window, width=event.width)
+
+    def _on_mousewheel(self, event):
+        """Handle mousewheel scrolling."""
+        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
     
     def setup_title_bar(self):
         """Setup the title bar with action buttons."""
-        title_frame = tk.Frame(self.root, bg="#4A90E2", height=50)
+        title_frame = tk.Frame(self.root, bg="#1565C0", height=60)
         title_frame.pack(fill=tk.X)
         title_frame.pack_propagate(False)
         
         tk.Label(title_frame, text="BOMBBUSTER - IRL TRACKER", 
-                font=("Arial", 14, "bold"), bg="#4A90E2", fg="white").pack(side=tk.LEFT, padx=20)
+                font=("Arial", 16, "bold"), bg="#1565C0", fg="white").pack(side=tk.LEFT, padx=20)
         
-        button_frame = tk.Frame(title_frame, bg="#4A90E2")
+        button_frame = tk.Frame(title_frame, bg="#1565C0")
         button_frame.pack(side=tk.RIGHT, padx=10)
         
-        tk.Button(button_frame, text="Save & Refresh", command=self.save_and_refresh,
-                 bg="white", padx=10).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="SAVE & REFRESH", command=self.save_and_refresh,
+                 bg="#FFC107", fg="black", padx=15, pady=5, font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=5)
     
     def setup_action_selector(self):
         """Setup action type selector buttons."""
-        selector_frame = tk.Frame(self.root, bg="#f0f0f0", height=60)
+        selector_frame = tk.Frame(self.root, bg="#ECEFF1", height=70)
         selector_frame.pack(fill=tk.X, padx=10, pady=5)
         selector_frame.pack_propagate(False)
         
-        tk.Label(selector_frame, text="ACTION TYPE:", bg="#f0f0f0", 
-                font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=10)
+        tk.Label(selector_frame, text="ACTION TYPE:", bg="#ECEFF1", 
+                font=("Arial", 11, "bold"), fg="#455A64").pack(side=tk.LEFT, padx=10)
         
         actions = [
             ("CALL", "call"),
             ("SWAP", "swap"),
             ("DOUBLE REVEAL", "double_reveal"),
             ("SIGNAL", "signal"),
-            ("NOT PRESENT", "not_present")
+            ("NOT PRESENT", "not_present"),
+            ("VIEW BELIEFS", "beliefs")
         ]
         
         self.action_buttons = {}
         for label, action_type in actions:
             btn = tk.Button(selector_frame, text=label, 
                           command=lambda at=action_type: self.switch_action_panel(at),
-                          padx=15, pady=5, font=("Arial", 9))
+                          padx=15, pady=8, font=("Arial", 9, "bold"))
             btn.pack(side=tk.LEFT, padx=5)
             self.action_buttons[action_type] = btn
     
@@ -176,13 +205,15 @@ class BombBusterGUI:
         self.double_reveal_panel = DoubleRevealActionPanel(self.action_container, self)
         self.signal_panel = SignalActionPanel(self.action_container, self)
         self.not_present_panel = NotPresentActionPanel(self.action_container, self)
+        self.beliefs_panel = BeliefViewPanel(self.action_container, self)
         
         self.panels = {
             "call": self.call_panel,
             "swap": self.swap_panel,
             "double_reveal": self.double_reveal_panel,
             "signal": self.signal_panel,
-            "not_present": self.not_present_panel
+            "not_present": self.not_present_panel,
+            "beliefs": self.beliefs_panel
         }
     
     def switch_action_panel(self, action_type):
@@ -251,6 +282,7 @@ class BombBusterGUI:
             bg_color = "white"
             border_width = 2
             border_color = "black"
+            font = ("Arial", 12, "bold")
             
             if len(pos_beliefs) == 1:
                 # Single value - either revealed or certain
@@ -268,6 +300,10 @@ class BombBusterGUI:
                 if not is_revealed:
                     # It's certain (deduced)
                     bg_color = "#F8E71C"  # Yellow for certain
+            elif len(pos_beliefs) < 4:
+                # Uncertain but few possibilities
+                display_value = "\n".join(str(v) for v in sorted(pos_beliefs))
+                font = ("Arial", 10)
             
             # Check if this position is currently selected
             is_selected = False
@@ -293,7 +329,7 @@ class BombBusterGUI:
             
             # Value display (non-clickable, just visual reference)
             value_label = tk.Label(card_frame, text=display_value, width=4, height=3,
-                                  bg=bg_color, font=("Arial", 12, "bold"))
+                                  bg=bg_color, font=font)
             value_label.pack()
             
             # Position label below
@@ -310,19 +346,6 @@ class BombBusterGUI:
         tk.Label(legend_frame, text="⚪ Uncertain  ", font=("Arial", 8)).pack(side=tk.LEFT, padx=5)
         tk.Label(legend_frame, text="🟠 Selected", font=("Arial", 8)).pack(side=tk.LEFT, padx=5)
     
-    def setup_action_log(self):
-        """Setup the recent actions log."""
-        log_frame = tk.LabelFrame(self.root, text="RECENT ACTIONS (Last 10)",
-                                 font=("Arial", 10, "bold"), padx=10, pady=10)
-        log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        self.action_log = scrolledtext.ScrolledText(log_frame, height=8, width=80,
-                                                     font=("Courier", 9))
-        self.action_log.pack(fill=tk.BOTH, expand=True)
-        self.action_log.config(state=tk.DISABLED)
-        
-        self.update_action_log()
-    
     def setup_game_state(self):
         """Setup the game state display."""
         state_frame = tk.Frame(self.root, bg="#f0f0f0", height=50)
@@ -334,46 +357,6 @@ class BombBusterGUI:
         self.state_label.pack(pady=10)
         
         self.update_game_state()
-    
-    def update_action_log(self):
-        """Update the action log display."""
-        self.action_log.config(state=tk.NORMAL)
-        self.action_log.delete("1.0", tk.END)
-        
-        # Show last 10 actions
-        all_actions = []
-        for i, call in enumerate(self.calls):
-            all_actions.append(("CALL", i, call))
-        for i, reveal in enumerate(self.double_reveals):
-            all_actions.append(("REVEAL", i, reveal))
-        for i, swap in enumerate(self.swaps):
-            all_actions.append(("SWAP", i, swap))
-        for i, signal in enumerate(self.signals):
-            all_actions.append(("SIGNAL", i, signal))
-        for i, np in enumerate(self.not_present):
-            all_actions.append(("NOT_PRESENT", i, np))
-        
-        recent = all_actions[-10:]
-        
-        for i, (action_type, idx, action) in enumerate(reversed(recent)):
-            turn_num = len(all_actions) - len(recent) + len(recent) - i
-            self.action_log.insert(tk.END, f"Turn {turn_num}: ")
-            
-            if action_type == "CALL":
-                caller = self.player_names.get(action[0] if isinstance(action[0], int) else 0, action[0])
-                target = self.player_names.get(action[1] if isinstance(action[1], int) else 0, action[1])
-                result = "SUCCESS" if action[4] else "FAIL"
-                self.action_log.insert(tk.END, f"{caller} → {target}[{action[2]+1}] = {action[3]} [{result}]\n")
-            elif action_type == "SIGNAL":
-                player = self.player_names.get(action[0] if isinstance(action[0], int) else 0, action[0])
-                self.action_log.insert(tk.END, f"{player} SIGNALS [{action[2]+1}] = {action[1]}\n")
-            elif action_type == "NOT_PRESENT":
-                player = self.player_names.get(action[0] if isinstance(action[0], int) else 0, action[0])
-                self.action_log.insert(tk.END, f"{player} NOT PRESENT value={action[1]}\n")
-            else:
-                self.action_log.insert(tk.END, f"{action}\n")
-        
-        self.action_log.config(state=tk.DISABLED)
     
     def update_game_state(self):
         """Update the game state display."""
@@ -418,19 +401,21 @@ class BombBusterGUI:
             self.initialize_game()
             
             # Refresh displays
-            self.update_action_log()
             self.update_game_state()
             
             # Refresh hand viewers in the current action panel
             current_panel = self.panels.get(self.current_action_type)
-            if current_panel and hasattr(current_panel, 'hand_viewer_frame'):
-                # Refresh all hand frames in the panel
-                for player_key in ['caller', 'target', 'player', 'player1', 'player2']:
-                    if player_key in current_panel.selections and hasattr(current_panel, f'{player_key}_hand_frame'):
-                        frame = getattr(current_panel, f'{player_key}_hand_frame')
-                        player_id = current_panel.selections[player_key]
-                        position_key = current_panel.get_position_key_for_player(player_key)
-                        self.draw_player_hand(frame, player_id, position_key=position_key, panel=current_panel)
+            if current_panel:
+                if hasattr(current_panel, 'refresh'):
+                    current_panel.refresh()
+                elif hasattr(current_panel, 'hand_viewer_frame'):
+                    # Refresh all hand frames in the panel
+                    for player_key in ['caller', 'target', 'player', 'player1', 'player2']:
+                        if player_key in current_panel.selections and hasattr(current_panel, f'{player_key}_hand_frame'):
+                            frame = getattr(current_panel, f'{player_key}_hand_frame')
+                            player_id = current_panel.selections[player_key]
+                            position_key = current_panel.get_position_key_for_player(player_key)
+                            self.draw_player_hand(frame, player_id, position_key=position_key, panel=current_panel)
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to refresh:\n{str(e)}")
@@ -447,69 +432,71 @@ class ActionPanel(tk.Frame):
         super().__init__(parent, relief=tk.RIDGE, borderwidth=2)
         self.app = app
         self.selections = {}
+        self.vars = {}  # Store Tk variables
     
     def create_player_buttons(self, parent, label, key):
         """Create player selection buttons."""
-        frame = tk.Frame(parent)
-        frame.pack(fill=tk.X, pady=5)
+        frame = tk.Frame(parent, bg="#E3F2FD", padx=5, pady=5, relief=tk.GROOVE, borderwidth=1)
+        frame.pack(fill=tk.X, pady=5, padx=5)
         
-        tk.Label(frame, text=label, width=20, anchor=tk.W).pack(side=tk.LEFT)
+        tk.Label(frame, text=label, width=20, anchor=tk.W, bg="#E3F2FD", font=("Arial", 10, "bold")).pack(side=tk.LEFT)
         
-        button_frame = tk.Frame(frame)
+        button_frame = tk.Frame(frame, bg="#E3F2FD")
         button_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
+        self.vars[key] = tk.IntVar(value=-1)
+        
         for pid, name in self.app.player_names.items():
-            btn = tk.Button(button_frame, text=name, width=10,
-                          command=lambda p=pid: self.select_player(key, p))
+            btn = tk.Radiobutton(button_frame, text=name, width=10,
+                               variable=self.vars[key], value=pid,
+                               indicatoron=0, bg="white", selectcolor="#4A90E2",
+                               font=("Arial", 9),
+                               command=lambda k=key, p=pid: self.select_player(k, p))
             btn.pack(side=tk.LEFT, padx=2)
-            if f"{key}_buttons" not in self.selections:
-                self.selections[f"{key}_buttons"] = []
-            self.selections[f"{key}_buttons"].append((pid, btn))
     
     def create_position_buttons(self, parent, label, key):
         """Create position selection buttons."""
-        frame = tk.Frame(parent)
-        frame.pack(fill=tk.X, pady=5)
+        frame = tk.Frame(parent, bg="#FFF3E0", padx=5, pady=5, relief=tk.GROOVE, borderwidth=1)
+        frame.pack(fill=tk.X, pady=5, padx=5)
         
-        tk.Label(frame, text=label, anchor=tk.W).pack()
+        tk.Label(frame, text=label, anchor=tk.W, bg="#FFF3E0", font=("Arial", 10, "bold")).pack()
         
-        button_frame = tk.Frame(frame)
-        button_frame.pack(fill=tk.X)
+        button_frame = tk.Frame(frame, bg="#FFF3E0")
+        button_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        self.vars[key] = tk.IntVar(value=-1)
         
         for pos in range(self.app.config.wires_per_player):
-            btn = tk.Button(button_frame, text=str(pos + 1), width=3,
-                          command=lambda p=pos: self.select_position(key, p))
-            btn.pack(side=tk.LEFT, padx=1)
-            if f"{key}_buttons" not in self.selections:
-                self.selections[f"{key}_buttons"] = []
-            self.selections[f"{key}_buttons"].append((pos, btn))
+            btn = tk.Radiobutton(button_frame, text=str(pos + 1), width=4,
+                               variable=self.vars[key], value=pos,
+                               indicatoron=0, bg="white", selectcolor="#F5A623",
+                               font=("Arial", 9, "bold"),
+                               command=lambda k=key, p=pos: self.select_position(k, p))
+            btn.pack(side=tk.LEFT, padx=2)
     
     def create_value_buttons(self, parent, label, key):
         """Create value selection buttons."""
-        frame = tk.Frame(parent)
-        frame.pack(fill=tk.X, pady=5)
+        frame = tk.Frame(parent, bg="#F3E5F5", padx=5, pady=5, relief=tk.GROOVE, borderwidth=1)
+        frame.pack(fill=tk.X, pady=5, padx=5)
         
-        tk.Label(frame, text=label, anchor=tk.W).pack()
+        tk.Label(frame, text=label, anchor=tk.W, bg="#F3E5F5", font=("Arial", 10, "bold")).pack()
         
-        button_frame = tk.Frame(frame)
-        button_frame.pack(fill=tk.X)
+        button_frame = tk.Frame(frame, bg="#F3E5F5")
+        button_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        self.vars[key] = tk.IntVar(value=-1)
         
         for value in self.app.config.wire_values:
-            btn = tk.Button(button_frame, text=str(value), width=4,
-                          command=lambda v=value: self.select_value(key, v))
-            btn.pack(side=tk.LEFT, padx=1)
-            if f"{key}_buttons" not in self.selections:
-                self.selections[f"{key}_buttons"] = []
-            self.selections[f"{key}_buttons"].append((value, btn))
+            btn = tk.Radiobutton(button_frame, text=str(value), width=5,
+                               variable=self.vars[key], value=value,
+                               indicatoron=0, bg="white", selectcolor="#BD10E0",
+                               font=("Arial", 9, "bold"),
+                               command=lambda k=key, v=value: self.select_value(k, v))
+            btn.pack(side=tk.LEFT, padx=2)
     
     def select_player(self, key, player_id):
         """Handle player button selection."""
         self.selections[key] = player_id
-        for pid, btn in self.selections.get(f"{key}_buttons", []):
-            if pid == player_id:
-                btn.config(bg="#4A90E2", fg="white", relief=tk.SUNKEN)
-            else:
-                btn.config(bg="white", fg="black", relief=tk.RAISED)
         
         # Update hand display if this panel has a hand viewer frame
         if hasattr(self, 'hand_viewer_frame') and hasattr(self, f'{key}_hand_frame'):
@@ -535,42 +522,26 @@ class ActionPanel(tk.Frame):
     def select_position(self, key, position):
         """Handle position button selection."""
         self.selections[key] = position
-        for pos, btn in self.selections.get(f"{key}_buttons", []):
-            if pos == position:
-                btn.config(bg="#F5A623", fg="white", relief=tk.SUNKEN)
-            else:
-                btn.config(bg="white", fg="black", relief=tk.RAISED)
         
         # Redraw hand viewer to show selection if applicable
         if hasattr(self, 'hand_viewer_frame'):
-            # Find which player's hand to redraw
+            # Redraw all visible hand frames to ensure highlights are correct
             for player_key in ['caller', 'target', 'player', 'player1', 'player2']:
                 if player_key in self.selections and hasattr(self, f'{player_key}_hand_frame'):
                     frame = getattr(self, f'{player_key}_hand_frame')
                     position_key = self.get_position_key_for_player(player_key)
                     self.app.draw_player_hand(frame, self.selections[player_key], 
                                              position_key=position_key, panel=self)
-                    break
     
     def select_value(self, key, value):
         """Handle value button selection."""
         self.selections[key] = value
-        for val, btn in self.selections.get(f"{key}_buttons", []):
-            if val == value:
-                btn.config(bg="#BD10E0", fg="white", relief=tk.SUNKEN)
-            else:
-                btn.config(bg="white", fg="black", relief=tk.RAISED)
     
     def clear_selections(self):
         """Clear all selections."""
-        # Reset button styles before clearing selections dict
-        for key in list(self.selections.keys()):
-            if key.endswith("_buttons"):
-                for _, btn in self.selections[key]:
-                    btn.config(bg="white", fg="black", relief=tk.RAISED)
-        
-        # Clear selections
         self.selections = {}
+        for var in self.vars.values():
+            var.set(-1)
         
         # Clear hand viewer frames
         for player_key in ['caller', 'target', 'player', 'player1', 'player2']:
@@ -587,7 +558,7 @@ class CallActionPanel(ActionPanel):
         super().__init__(parent, app)
         self.hand_viewer_frame = True  # Flag to enable hand viewing
         
-        tk.Label(self, text="CALL ACTION", font=("Arial", 12, "bold")).pack(pady=10)
+        tk.Label(self, text="CALL ACTION", font=("Arial", 14, "bold"), fg="#333333").pack(pady=10)
         
         self.create_player_buttons(self, "Caller:", "caller")
         
@@ -598,7 +569,7 @@ class CallActionPanel(ActionPanel):
         # Caller position (optional, shown based on result)
         self.caller_pos_frame = tk.Frame(self)
         self.caller_pos_frame.pack(fill=tk.X, pady=5, padx=10)  # Pack it by default (success is default)
-        tk.Label(self.caller_pos_frame, text="Caller Position (optional):", anchor=tk.W).pack()
+        tk.Label(self.caller_pos_frame, text="Caller Position (optional):", anchor=tk.W, font=("Arial", 10, "italic")).pack()
         self.create_position_buttons(self.caller_pos_frame, "", "caller_position")
         
         self.create_player_buttons(self, "Target:", "target")
@@ -608,29 +579,31 @@ class CallActionPanel(ActionPanel):
         self.target_hand_frame.pack(fill=tk.X, pady=5, padx=10)
         
         # Position selection buttons
-        self.create_position_buttons(self, "Position:", "position")
+        self.create_position_buttons(self, "Target Position:", "position")
         
         # Value selection
         self.create_value_buttons(self, "Value:", "value")
         
         # Result
-        result_frame = tk.Frame(self)
-        result_frame.pack(fill=tk.X, pady=10)
-        tk.Label(result_frame, text="Result:", width=20, anchor=tk.W).pack(side=tk.LEFT)
+        result_frame = tk.Frame(self, bg="#E8F5E9", padx=10, pady=10, relief=tk.GROOVE, borderwidth=1)
+        result_frame.pack(fill=tk.X, pady=10, padx=5)
+        tk.Label(result_frame, text="Result:", width=10, anchor=tk.W, bg="#E8F5E9", font=("Arial", 10, "bold")).pack(side=tk.LEFT)
         
         self.result_var = tk.StringVar(value="success")
         tk.Radiobutton(result_frame, text="SUCCESS", variable=self.result_var, 
-                      value="success", command=self.toggle_caller_position).pack(side=tk.LEFT, padx=10)
+                      value="success", command=self.toggle_caller_position,
+                      bg="#E8F5E9", font=("Arial", 10)).pack(side=tk.LEFT, padx=10)
         tk.Radiobutton(result_frame, text="FAIL", variable=self.result_var, 
-                      value="fail", command=self.toggle_caller_position).pack(side=tk.LEFT, padx=10)
+                      value="fail", command=self.toggle_caller_position,
+                      bg="#E8F5E9", font=("Arial", 10)).pack(side=tk.LEFT, padx=10)
         
         # Buttons
         button_frame = tk.Frame(self)
         button_frame.pack(pady=20)
-        tk.Button(button_frame, text="Add Call", command=self.add_call,
-                 bg="#7ED321", fg="white", padx=20, pady=5).pack(side=tk.LEFT, padx=5)
-        tk.Button(button_frame, text="Clear", command=self.clear,
-                 padx=20, pady=5).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="ADD CALL", command=self.add_call,
+                 bg="#4CAF50", fg="white", padx=30, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
+        tk.Button(button_frame, text="CLEAR", command=self.clear,
+                 bg="#F44336", fg="white", padx=20, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
     
     def toggle_caller_position(self):
         """Enable/disable caller position based on result."""
@@ -681,7 +654,7 @@ class SwapActionPanel(ActionPanel):
         super().__init__(parent, app)
         self.hand_viewer_frame = True  # Flag to enable hand viewing
         
-        tk.Label(self, text="SWAP ACTION", font=("Arial", 12, "bold")).pack(pady=10)
+        tk.Label(self, text="SWAP ACTION", font=("Arial", 14, "bold"), fg="#333333").pack(pady=10)
         
         self.create_player_buttons(self, "Player 1:", "player1")
         
@@ -701,7 +674,7 @@ class SwapActionPanel(ActionPanel):
         # Position selection buttons
         self.create_position_buttons(self, "Initial Position (P2):", "init_pos2")
         
-        tk.Label(self, text="─── After removing wires ───", font=("Arial", 9, "italic")).pack(pady=5)
+        tk.Label(self, text="─── After removing wires ───", font=("Arial", 10, "italic", "bold"), fg="#666666").pack(pady=10)
         
         self.create_position_buttons(self, "Final Position (P1):", "final_pos1")
         self.create_position_buttons(self, "Final Position (P2):", "final_pos2")
@@ -709,10 +682,10 @@ class SwapActionPanel(ActionPanel):
         # Buttons
         button_frame = tk.Frame(self)
         button_frame.pack(pady=20)
-        tk.Button(button_frame, text="Add Swap", command=self.add_swap,
-                 bg="#7ED321", fg="white", padx=20, pady=5).pack(side=tk.LEFT, padx=5)
-        tk.Button(button_frame, text="Clear", command=self.clear,
-                 padx=20, pady=5).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="ADD SWAP", command=self.add_swap,
+                 bg="#4CAF50", fg="white", padx=30, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
+        tk.Button(button_frame, text="CLEAR", command=self.clear,
+                 bg="#F44336", fg="white", padx=20, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
     
     def add_swap(self):
         """Add the swap action."""
@@ -748,7 +721,7 @@ class DoubleRevealActionPanel(ActionPanel):
         super().__init__(parent, app)
         self.hand_viewer_frame = True  # Flag to enable hand viewing
         
-        tk.Label(self, text="DOUBLE REVEAL ACTION", font=("Arial", 12, "bold")).pack(pady=10)
+        tk.Label(self, text="DOUBLE REVEAL ACTION", font=("Arial", 14, "bold"), fg="#333333").pack(pady=10)
         
         self.create_player_buttons(self, "Player:", "player")
         
@@ -760,7 +733,7 @@ class DoubleRevealActionPanel(ActionPanel):
         self.position_status_frame = tk.Frame(self)
         self.position_status_frame.pack(pady=5)
         self.position_status_label = tk.Label(self.position_status_frame, text="Select 2 positions below",
-                                             font=("Arial", 9, "italic"))
+                                             font=("Arial", 10, "italic"), fg="#666666")
         self.position_status_label.pack()
         
         # Position selection buttons
@@ -770,23 +743,15 @@ class DoubleRevealActionPanel(ActionPanel):
         self.create_value_buttons(self, "Value:", "value")
         
         tk.Label(self, text="ℹ️ Use when revealing the last 2 copies of a value",
-                font=("Arial", 9, "italic")).pack(pady=5)
+                font=("Arial", 9, "italic"), fg="#666666").pack(pady=5)
         
         # Buttons
         button_frame = tk.Frame(self)
         button_frame.pack(pady=20)
-        tk.Button(button_frame, text="Add Double Reveal", command=self.add_reveal,
-                 bg="#7ED321", fg="white", padx=20, pady=5).pack(side=tk.LEFT, padx=5)
-        tk.Button(button_frame, text="Clear", command=self.clear,
-                 padx=20, pady=5).pack(side=tk.LEFT, padx=5)
-    
-    def select_position(self, key, position):
-        """Override to update hand display and redraw it."""
-        super().select_position(key, position)
-        # Redraw hand to show selection highlight
-        if 'player' in self.selections:
-            self.app.draw_player_hand(self.player_hand_frame, self.selections['player'], 
-                                     position_key='position1', panel=self)
+        tk.Button(button_frame, text="ADD DOUBLE REVEAL", command=self.add_reveal,
+                 bg="#4CAF50", fg="white", padx=30, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
+        tk.Button(button_frame, text="CLEAR", command=self.clear,
+                 bg="#F44336", fg="white", padx=20, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
     
     def add_reveal(self):
         """Add the double reveal action."""
@@ -818,7 +783,7 @@ class SignalActionPanel(ActionPanel):
         super().__init__(parent, app)
         self.hand_viewer_frame = True  # Flag to enable hand viewing
         
-        tk.Label(self, text="SIGNAL ACTION", font=("Arial", 12, "bold")).pack(pady=10)
+        tk.Label(self, text="SIGNAL ACTION", font=("Arial", 14, "bold"), fg="#333333").pack(pady=10)
         
         self.create_player_buttons(self, "Player:", "player")
         
@@ -832,15 +797,15 @@ class SignalActionPanel(ActionPanel):
         self.create_value_buttons(self, "Value:", "value")
         
         tk.Label(self, text="ℹ️ Use when a player announces they know a specific wire",
-                font=("Arial", 9, "italic")).pack(pady=5)
+                font=("Arial", 9, "italic"), fg="#666666").pack(pady=5)
         
         # Buttons
         button_frame = tk.Frame(self)
         button_frame.pack(pady=20)
-        tk.Button(button_frame, text="Add Signal", command=self.add_signal,
-                 bg="#7ED321", fg="white", padx=20, pady=5).pack(side=tk.LEFT, padx=5)
-        tk.Button(button_frame, text="Clear", command=self.clear,
-                 padx=20, pady=5).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="ADD SIGNAL", command=self.add_signal,
+                 bg="#4CAF50", fg="white", padx=30, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
+        tk.Button(button_frame, text="CLEAR", command=self.clear,
+                 bg="#F44336", fg="white", padx=20, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
     
     def add_signal(self):
         """Add the signal action."""
@@ -870,7 +835,7 @@ class NotPresentActionPanel(ActionPanel):
         super().__init__(parent, app)
         self.hand_viewer_frame = True  # Flag to enable hand viewing
         
-        tk.Label(self, text="NOT PRESENT ACTION", font=("Arial", 12, "bold")).pack(pady=10)
+        tk.Label(self, text="NOT PRESENT ACTION", font=("Arial", 14, "bold"), fg="#333333").pack(pady=10)
         
         self.create_player_buttons(self, "Player:", "player")
         
@@ -881,15 +846,15 @@ class NotPresentActionPanel(ActionPanel):
         self.create_value_buttons(self, "Value:", "value")
         
         tk.Label(self, text="ℹ️ Use when a player announces they don't have this value",
-                font=("Arial", 9, "italic")).pack(pady=5)
+                font=("Arial", 9, "italic"), fg="#666666").pack(pady=5)
         
         # Buttons
         button_frame = tk.Frame(self)
         button_frame.pack(pady=20)
-        tk.Button(button_frame, text="Add Not Present", command=self.add_not_present,
-                 bg="#7ED321", fg="white", padx=20, pady=5).pack(side=tk.LEFT, padx=5)
-        tk.Button(button_frame, text="Clear", command=self.clear,
-                 padx=20, pady=5).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="ADD NOT PRESENT", command=self.add_not_present,
+                 bg="#4CAF50", fg="white", padx=30, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
+        tk.Button(button_frame, text="CLEAR", command=self.clear,
+                 bg="#F44336", fg="white", padx=20, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
     
     def add_not_present(self):
         """Add the not present action."""
@@ -909,6 +874,64 @@ class NotPresentActionPanel(ActionPanel):
     def clear(self):
         """Clear all selections."""
         self.clear_selections()
+
+
+class BeliefViewPanel(tk.Frame):
+    """Panel for viewing all player beliefs."""
+    
+    def __init__(self, parent, app):
+        super().__init__(parent, relief=tk.RIDGE, borderwidth=2)
+        self.app = app
+        
+        tk.Label(self, text="BELIEF SYSTEM VIEW", font=("Arial", 14, "bold"), fg="#333333").pack(pady=10)
+        
+        # Scrollable container
+        self.canvas = tk.Canvas(self)
+        self.scrollbar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas)
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+        
+        # Create frames for each player
+        self.player_frames = {}
+        self.setup_player_views()
+        
+    def setup_player_views(self):
+        """Create view frames for all other players."""
+        # Clear existing
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        self.player_frames = {}
+            
+        for pid, name in self.app.player_names.items():
+            if pid == self.app.my_player_id:
+                continue
+                
+            frame = tk.Frame(self.scrollable_frame, relief=tk.GROOVE, borderwidth=1, padx=10, pady=10, bg="#FAFAFA")
+            frame.pack(fill=tk.X, pady=5, padx=10)
+            
+            self.player_frames[pid] = frame
+            
+            # Initial draw
+            self.app.draw_player_hand(frame, pid)
+            
+    def refresh(self):
+        """Refresh all player views."""
+        # Re-setup if players changed (unlikely but safe) or just redraw
+        if not self.player_frames:
+            self.setup_player_views()
+        else:
+            for pid, frame in self.player_frames.items():
+                self.app.draw_player_hand(frame, pid)
 
 
 if __name__ == "__main__":
