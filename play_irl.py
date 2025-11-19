@@ -35,7 +35,7 @@ from src.utils import (
 # ============================================================================
 
 # Your wire (the cards you're holding)
-MY_WIRE = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+MY_WIRE = [1,2,3,3,5,7,7,8,8,9,9,10,11]
 
 # Your player ID (0, 1, 2, 3, ...)
 MY_PLAYER_ID = 0
@@ -43,11 +43,11 @@ MY_PLAYER_ID = 0
 # Player names (optional - makes output more readable)
 # If you don't want to use names, set to None or {}
 PLAYER_NAMES = {
-    0: "Alice",
-    1: "Bob", 
-    2: "Charlie",
-    3: "Diana",
-    4: "Eve"
+    0: "Ettore",
+    1: "Brini", 
+    2: "Frodo",
+    # 3: "Ricky",
+    3: "Gorgo"
 }
 
 # Folder to save/load belief state
@@ -55,7 +55,7 @@ BELIEF_FOLDER = "real_game_beliefs"
 
 # Control saving and loading of beliefs and value tracker
 SAVE_TO_JSON = True   # Set to False to disable saving beliefs to JSON files
-LOAD_FROM_JSON = False  # Set to False to start fresh (ignore existing JSON files)
+LOAD_FROM_JSON = True  # Set to False to start fresh (ignore existing JSON files)
 
 # ============================================================================
 # CALL HISTORY - Add calls here as they happen
@@ -63,8 +63,35 @@ LOAD_FROM_JSON = False  # Set to False to start fresh (ignore existing JSON file
 # Format: (caller, target, position, value, success, [caller_position])
 
 CALLS = [
-    # ("Charlie", "Bob", 5, 8, True, ),     
-    # ("Alice", "Bob", 7, 8, True, 8),     
+    ("Ettore","Brini",13,13,True),
+    ("Ettore","Frodo",13,13,True),
+
+    ("Ettore", "Gorgo",4,6,True),
+    ("Ettore", "Frodo",11,12,True),
+    ("Ettore", "Brini",9,7,True),
+    ("Brini", "Ettore",12,10,True),
+
+    ("Gorgo", "Ettore", 10, 12, True, 9),
+    ("Frodo", "Brini",1,1,True,1),
+    ("Brini", "Gorgo",4,6,True,8),
+    ("Ettore", "Gorgo",1,1,False),
+
+    ("Gorgo", "Frodo", 11,12,True,12),
+    ("Frodo", "Frodo",11,11,True,9),
+    ("Brini", "Ettore",1,1,True,2),
+    # ("Ettore", ""),
+
+    
+    # ("Gorgo", ""),
+    # ("Frodo", ""),
+    # ("Brini", ""),
+    # ("Ettore", ""),
+    
+
+
+
+    # ("Brini","Gorfo",3,3,True),
+    
 ]
 
 # ============================================================================
@@ -74,39 +101,38 @@ CALLS = [
 # Format: (player, value, position1, position2)
 
 DOUBLE_REVEALS = [
-    # ("Charlie", 10, 9, 10),  # Charlie reveals last 2 copies of value 12
+    
 ]
 
 # ============================================================================
 # WIRE SWAPS - Add swaps here (optional)
 # ============================================================================
-# Format: (player1, player2, init_pos1, init_pos2, final_pos1, final_pos2, received_value)
+# Format: (player1, player2, init_pos1, init_pos2, final_pos1, final_pos2, [received_value])
 #
-# Use this when two players exchange wires
-# 
-# IMPORTANT: received_value is REQUIRED if you (MY_PLAYER_ID) are one of the players!
-#            This is the value YOU received from the swap (you can see it)
-#
-# EASY FORMAT (recommended):
-#   - Use player names from PLAYER_NAMES (or IDs as integers)
-#   - Positions are 1-indexed (1, 2, 3, ...) - easier to count!
-#   - init_pos: position of wire being given away
-#   - final_pos: position where received wire is inserted (after sorting)
-#   - received_value: the value YOU received (required if you're involved)
-#   
-#   Example: ("Alice", "Bob", 5, 3, 4, 6, 7)
-#     If YOU are Alice: You give position 5, receive value 7 inserted at position 4
-#     If YOU are Bob: Bob gives position 3, receives wire inserted at position 6
-#   
-#   Example: ("Charlie", "Diana", 2, 8, 3, 7)
-#     Neither player is you, so received_value is optional (can be omitted)
-#
-# The script automatically converts to internal format (0-indexed)
 
 SWAPS = [
-    ("Alice", "Bob", 5, 4, 6, 7, 6.5), 
-    # Alice gives wire 5 at pos 5 (idx 4) to Bob in pos 7 (idx 6)
-    # Bob gives wire 6.5 at pos 4 (idx 3) to Alice in pos 6 (idx 5)
+    
+]
+
+# ============================================================================
+# SIGNALS - Add signals here (when a player announces a certain value)
+# ============================================================================
+# Format: (player, value, position)
+# Use when someone announces they know a specific wire value
+# Positions are 1-indexed (1, 2, 3, ...)
+
+SIGNALS = [
+    
+]
+
+# ============================================================================
+# NOT PRESENT - Add announcements when a player doesn't have a value
+# ============================================================================
+# Format: (player, value)
+# Use when someone announces they don't have a specific value at all
+
+NOT_PRESENT = [
+    
 ]
 
 # ============================================================================
@@ -134,6 +160,8 @@ def main():
             player_names=PLAYER_NAMES,
             double_reveals=DOUBLE_REVEALS,
             swaps=SWAPS,
+            signals=SIGNALS,
+            not_present=NOT_PRESENT,
             save_to_json=SAVE_TO_JSON,
             load_from_json=LOAD_FROM_JSON
         )
@@ -147,6 +175,7 @@ def main():
     state = result['state']
     call_records = result['call_records']
     loaded_from_file = result['loaded_from_file']
+    processed_incrementally = result.get('processed_incrementally', False)
     player_names = result['player_names']
     
     # Print player setup
@@ -155,31 +184,37 @@ def main():
     # Show if loaded from previous session
     if loaded_from_file:
         print(f"\n📂 Loaded existing belief state from {BELIEF_FOLDER}/")
+        if processed_incrementally:
+            print(f"   ⚡ Incremental mode: Only new actions were processed (faster!)")
+        else:
+            print(f"   ✓ No new actions to process")
         print(f"   💡 You can manually edit JSON files in that folder")
     else:
         print(f"\n📝 Starting fresh belief state")
         print(f"   Will be saved to {BELIEF_FOLDER}/ folder")
     
-    # Print call history
-    print_call_history(call_records, player_names)
+    # Print call history (only show recent ones if many calls)
+    if len(call_records) > 0:
+        print_call_history(call_records, player_names, only_recent=processed_incrementally)
     
     # Print game state
     print_game_state(state, config)
     
     # Print your information and suggestions
-    # print_player_info(my_player, MY_PLAYER_ID, state, player_names, config)
+    print_player_info(my_player, MY_PLAYER_ID, state, player_names, config)
     
     # Print belief state
     print_belief_state(my_player, BELIEF_FOLDER, MY_PLAYER_ID, player_names, config)
 
     # Print statistics
-    # print_statistics(my_player, player_names, config)
+    print_statistics(my_player, player_names, config)
     
     # Print session complete
-    # print_session_complete(BELIEF_FOLDER)
+    print_session_complete(BELIEF_FOLDER)
 
 
 
 
 if __name__ == "__main__":
     main()
+

@@ -6,7 +6,7 @@ for every wire position across all players from their perspective.
 
 from typing import Dict, Set, List, Optional, Union
 from itertools import combinations
-from src.data_structures import CallRecord, DoubleRevealRecord, SwapRecord, GameObservation, ValueTracker
+from src.data_structures import CallRecord, DoubleRevealRecord, SwapRecord, SignalRecord, NotPresentRecord, GameObservation, ValueTracker
 from config.game_config import GameConfig
 import json
 from pathlib import Path
@@ -117,6 +117,46 @@ class BeliefModel:
         # Add both positions to revealed in value tracker
         self.value_trackers[value].add_revealed(player_id, pos1)
         self.value_trackers[value].add_revealed(player_id, pos2)
+        
+        # Apply filters to deduce new information
+        self.apply_filters()
+    
+    def process_signal(self, signal_record: SignalRecord):
+        """
+        Update beliefs based on a player's signal.
+        When a player announces they have a certain value at a specific position.
+        
+        Args:
+            signal_record: The signal to process
+        """
+        player_id = signal_record.player_id
+        value = signal_record.value
+        position = signal_record.position
+        
+        # Set the belief for this position to the signaled value (revealed)
+        self.beliefs[player_id][position] = {value}
+        
+        # Add to certain     in value tracker
+        self.value_trackers[value].add_certain(player_id, position)
+        
+        # Apply filters to deduce new information
+        self.apply_filters()
+    
+    def process_not_present(self, not_present_record: NotPresentRecord):
+        """
+        Update beliefs based on a player announcing they don't have a specific value.
+        Remove the value from all of the player's possible positions.
+        
+        Args:
+            not_present_record: The not-present announcement to process
+        """
+        player_id = not_present_record.player_id
+        value = not_present_record.value
+        
+        # Remove this value from all positions for this player
+        for position in range(len(self.beliefs[player_id])):
+            if value in self.beliefs[player_id][position]:
+                self.beliefs[player_id][position].discard(value)
         
         # Apply filters to deduce new information
         self.apply_filters()

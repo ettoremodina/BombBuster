@@ -4,7 +4,7 @@ This is the central orchestrator for BombBuster gameplay.
 """
 
 from typing import List, Optional, Dict, Union
-from src.data_structures import CallRecord, DoubleRevealRecord, SwapRecord, GameObservation
+from src.data_structures import CallRecord, DoubleRevealRecord, SwapRecord, SignalRecord, NotPresentRecord, GameObservation
 from src.player import Player
 from config.game_config import GameConfig
 
@@ -60,6 +60,11 @@ class Game:
         from src.belief.belief_model import BeliefModel
         
         for player in self.players:
+            # In IRL mode, only initialize belief system for player 0 (us)
+            if self.config.playing_irl and player.player_id != 0:
+                player.belief_system = None
+                continue
+
             # Create observation for this player
             observation = self.get_observation_for_player(player.player_id)
             
@@ -161,6 +166,167 @@ class Game:
         self.current_turn += 1
         
         return reveal_record
+    
+    def signal_value(self, player_id: int, value: Union[int, float], position: int) -> SignalRecord:
+        """
+        Process a signal where a player announces they have a certain value at a position.
+        This is a direct knowledge announcement, useful for speeding up IRL gameplay.
+        
+        Args:
+            player_id: ID of the player making the signal
+            value: The value at the position (can be int or float)
+            position: Wire position being signaled (0-indexed)
+        
+        Returns:
+            SignalRecord with the result
+        
+        Raises:
+            ValueError: If the signal is invalid
+        """
+        # Validate the signal
+        self._validate_signal(player_id, value, position)
+        
+        # Create signal record
+        signal_record = SignalRecord(
+            player_id=player_id,
+            value=value,
+            position=position,
+            turn_number=self.current_turn
+        )
+        
+        # Broadcast to all players
+        self._broadcast_signal(signal_record)
+        
+        # Check win condition
+        self._check_win_condition()
+        
+        # Increment turn
+        self.current_turn += 1
+        
+        return signal_record
+    
+    def _validate_signal(self, player_id: int, value: Union[int, float], position: int):
+        """
+        Validate that a signal is legal according to game rules.
+        
+        Args:
+            player_id: ID of the player signaling
+            value: The value being signaled
+            position: The position being signaled
+        
+        Raises:
+            ValueError: If the signal violates game rules
+        """
+        # Check if game is over
+        if self.game_over:
+            raise ValueError("Game is already over")
+        
+        # Check if player ID is valid
+        if player_id < 0 or player_id >= len(self.players):
+            raise ValueError(f"Invalid player_id: {player_id}")
+        
+        # Check if position is valid
+        if position < 0 or position >= self.config.wires_per_player:
+            raise ValueError(f"Invalid position: {position}. Must be in [0, {self.config.wires_per_player-1}]")
+        
+        # Check if value is valid
+        if value not in self.config.wire_values:
+            raise ValueError(f"Invalid value: {value}. Must be in {self.config.wire_values}")
+        
+        # When not in IRL mode, validate that the player actually has this value at this position
+        if not self.config.playing_irl:
+            player = self.players[player_id]
+            if player.wire[position] != value:
+                raise ValueError(f"Player {player_id} does not have value {value} at position {position}")
+    
+    def _broadcast_signal(self, signal_record: SignalRecord):
+        """
+        Broadcast a signal to all players so they can update their beliefs.
+        
+        Args:
+            signal_record: The signal to broadcast
+        """
+        # Each player's belief system processes the signal
+        for player in self.players:
+            if player.belief_system is not None:
+                player.belief_system.process_signal(signal_record)
+    
+    def announce_not_present(self, player_id: int, value: Union[int, float]) -> NotPresentRecord:
+        """
+        Process an announcement where a player declares they don't have a specific value.
+        This removes the value from all of the player's possible positions.
+        
+        Args:
+            player_id: ID of the player making the announcement
+            value: The value they don't have (can be int or float)
+        
+        Returns:
+            NotPresentRecord with the result
+        
+        Raises:
+            ValueError: If the announcement is invalid
+        """
+        # Validate the announcement
+        self._validate_not_present(player_id, value)
+        
+        # Create not present record
+        not_present_record = NotPresentRecord(
+            player_id=player_id,
+            value=value,
+            turn_number=self.current_turn
+        )
+        
+        # Broadcast to all players
+        self._broadcast_not_present(not_present_record)
+        
+        # Check win condition
+        self._check_win_condition()
+        
+        # Increment turn
+        self.current_turn += 1
+        
+        return not_present_record
+    
+    def _validate_not_present(self, player_id: int, value: Union[int, float]):
+        """
+        Validate that a not-present announcement is legal according to game rules.
+        
+        Args:
+            player_id: ID of the player making the announcement
+            value: The value being announced as not present
+        
+        Raises:
+            ValueError: If the announcement violates game rules
+        """
+        # Check if game is over
+        if self.game_over:
+            raise ValueError("Game is already over")
+        
+        # Check if player ID is valid
+        if player_id < 0 or player_id >= len(self.players):
+            raise ValueError(f"Invalid player_id: {player_id}")
+        
+        # Check if value is valid
+        if value not in self.config.wire_values:
+            raise ValueError(f"Invalid value: {value}. Must be in {self.config.wire_values}")
+        
+        # When not in IRL mode, validate that the player actually doesn't have this value
+        if not self.config.playing_irl:
+            player = self.players[player_id]
+            if value in player.wire:
+                raise ValueError(f"Player {player_id} cannot announce not having value {value} - they possess it")
+    
+    def _broadcast_not_present(self, not_present_record: NotPresentRecord):
+        """
+        Broadcast a not-present announcement to all players so they can update their beliefs.
+        
+        Args:
+            not_present_record: The not-present announcement to broadcast
+        """
+        # Each player's belief system processes the not-present announcement
+        for player in self.players:
+            if player.belief_system is not None:
+                player.belief_system.process_not_present(not_present_record)
     
     def _validate_double_reveal(self, player_id: int, value: Union[int, float], position1: int, position2: int):
         """
@@ -478,6 +644,8 @@ class Game:
         # Check if every player's belief system has deduced all positions for all players
         for player in self.players:
             if player.belief_system is None:
+                if self.config.playing_irl:
+                    continue
                 return False
             
             # Check if this player has deduced all positions for all players

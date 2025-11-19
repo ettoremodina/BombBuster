@@ -1,0 +1,22 @@
+{
+  "calls": [
+    [
+      "Gorgo",
+      "Frodo",
+      12,
+      11,
+      true,
+      12
+    ]
+  ],
+  "double_reveals": [],
+  "swaps": [],
+  "signals": [
+    [
+      "Gorgo",
+      11,
+      12
+    ]
+  ],
+  "not_present": []
+}

@@ -4,6 +4,7 @@ Handles wire distribution, game utilities, and IRL gameplay helpers.
 """
 
 import random
+import json
 from typing import List, Union, Dict, Tuple, Optional
 from pathlib import Path
 from config.game_config import GameConfig
@@ -179,6 +180,116 @@ def format_double_reveal_for_user(reveal_record, player_names: Dict[int, str] = 
     return f"{player_name} DOUBLE REVEAL positions {pos1_display} and {pos2_display} = {reveal_record.value}"
 
 
+def convert_signal_to_internal(signal: Tuple, player_names: Dict[int, str] = None) -> Tuple:
+    """
+    Convert a user-friendly signal format (1-indexed position, optional names)
+    to internal format (0-indexed position, player ID).
+    
+    Args:
+        signal: Tuple of (player, value, position)
+                - player can be name (str) or ID (int)
+                - position is 1-indexed (user-friendly)
+        player_names: Optional dict mapping IDs to names {0: "Alice", 1: "Bob", ...}
+        
+    Returns:
+        Tuple of (player_id, value, position_0indexed)
+    """
+    player, value, position = signal
+    
+    # Create reverse mapping (name -> ID) if needed
+    name_to_id = {}
+    if player_names:
+        name_to_id = {name: pid for pid, name in player_names.items()}
+    
+    # Convert name to ID if needed
+    if isinstance(player, str):
+        if player in name_to_id:
+            player = name_to_id[player]
+        else:
+            try:
+                player = int(player)
+            except ValueError:
+                raise ValueError(f"Invalid player: {player}. Must be player name or ID.")
+    
+    # Convert position from 1-indexed to 0-indexed
+    pos_internal = position - 1
+    
+    return (int(player), value, pos_internal)
+
+
+def format_signal_for_user(signal_record, player_names: Dict[int, str] = None) -> str:
+    """
+    Format a signal record in a user-friendly way with names and 1-indexed position.
+    
+    Args:
+        signal_record: SignalRecord object
+        player_names: Optional dict mapping IDs to names
+        
+    Returns:
+        Formatted string
+    """
+    if player_names:
+        player_name = player_names.get(signal_record.player_id, f"Player {signal_record.player_id}")
+    else:
+        player_name = f"Player {signal_record.player_id}"
+    
+    # Convert position to 1-indexed
+    pos_display = signal_record.position + 1
+    
+    return f"{player_name} SIGNALS position {pos_display} = {signal_record.value}"
+
+
+def convert_not_present_to_internal(not_present: Tuple, player_names: Dict[int, str] = None) -> Tuple:
+    """
+    Convert a user-friendly not-present format to internal format.
+    
+    Args:
+        not_present: Tuple of (player, value)
+                     - player can be name (str) or ID (int)
+        player_names: Optional dict mapping IDs to names {0: "Alice", 1: "Bob", ...}
+        
+    Returns:
+        Tuple of (player_id, value)
+    """
+    player, value = not_present
+    
+    # Create reverse mapping (name -> ID) if needed
+    name_to_id = {}
+    if player_names:
+        name_to_id = {name: pid for pid, name in player_names.items()}
+    
+    # Convert name to ID if needed
+    if isinstance(player, str):
+        if player in name_to_id:
+            player = name_to_id[player]
+        else:
+            try:
+                player = int(player)
+            except ValueError:
+                raise ValueError(f"Invalid player: {player}. Must be player name or ID.")
+    
+    return (int(player), value)
+
+
+def format_not_present_for_user(not_present_record, player_names: Dict[int, str] = None) -> str:
+    """
+    Format a not-present record in a user-friendly way with names.
+    
+    Args:
+        not_present_record: NotPresentRecord object
+        player_names: Optional dict mapping IDs to names
+        
+    Returns:
+        Formatted string
+    """
+    if player_names:
+        player_name = player_names.get(not_present_record.player_id, f"Player {not_present_record.player_id}")
+    else:
+        player_name = f"Player {not_present_record.player_id}"
+    
+    return f"{player_name} DOES NOT HAVE value {not_present_record.value}"
+
+
 def convert_swap_to_internal(swap: Tuple, player_names: Dict[int, str] = None, my_player_id: int = None) -> Tuple:
     """
     Convert a user-friendly swap format (1-indexed positions, optional names)
@@ -301,6 +412,80 @@ def format_call_for_user(call_record, player_names: Dict[int, str] = None) -> st
     return f"{caller_name} → {target_name}[{position_user}] = {call_record.value} [{result}]"
 
 
+def save_action_history(belief_folder: str, player_id: int, 
+                       calls: List[Tuple], double_reveals: List[Tuple],
+                       swaps: List[Tuple], signals: List[Tuple],
+                       not_present: List[Tuple]):
+    """
+    Save the action history to track what has been processed.
+    
+    Args:
+        belief_folder: Folder to save history
+        player_id: Player ID
+        calls: List of call tuples
+        double_reveals: List of double reveal tuples
+        swaps: List of swap tuples
+        signals: List of signal tuples
+        not_present: List of not-present tuples
+    """
+    from pathlib import Path
+    
+    belief_path = Path(belief_folder)
+    player_dir = belief_path / f"player_{player_id}"
+    player_dir.mkdir(parents=True, exist_ok=True)
+    
+    history_file = player_dir / "action_history.json"
+    
+    history_data = {
+        "calls": calls,
+        "double_reveals": double_reveals,
+        "swaps": swaps,
+        "signals": signals,
+        "not_present": not_present
+    }
+    
+    with history_file.open("w", encoding="utf-8") as fh:
+        json.dump(history_data, fh, indent=2)
+
+
+def load_action_history(belief_folder: str, player_id: int) -> Optional[Dict]:
+    """
+    Load the action history if it exists.
+    
+    Args:
+        belief_folder: Folder where history is saved
+        player_id: Player ID
+        
+    Returns:
+        Dict with action lists or None if file doesn't exist
+    """
+    from pathlib import Path
+    
+    belief_path = Path(belief_folder)
+    history_file = belief_path / f"player_{player_id}" / "action_history.json"
+    
+    if not history_file.exists():
+        return None
+    
+    with history_file.open("r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def get_new_actions(old_actions: List, new_actions: List) -> List:
+    """
+    Get only the new actions that weren't in the old list.
+    
+    Args:
+        old_actions: Previously processed actions
+        new_actions: All actions including old and new
+        
+    Returns:
+        List of only new actions
+    """
+    old_count = len(old_actions)
+    return new_actions[old_count:]
+
+
 def run_irl_game_session(
     my_wire: List[Union[int, float]],
     my_player_id: int,
@@ -310,6 +495,8 @@ def run_irl_game_session(
     player_names: Dict[int, str] = None,
     double_reveals: List[Tuple] = None,
     swaps: List[Tuple] = None,
+    signals: List[Tuple] = None,
+    not_present: List[Tuple] = None,
     save_to_json: bool = True,
     load_from_json: bool = True
 ) -> Dict:
@@ -325,6 +512,8 @@ def run_irl_game_session(
         player_names: Optional dict mapping player IDs to names
         double_reveals: Optional list of double reveal tuples (player, value, pos1, pos2)
         swaps: Optional list of swap tuples (player1, player2, init_pos1, init_pos2, final_pos1, final_pos2)
+        signals: Optional list of signal tuples (player, value, position)
+        not_present: Optional list of not-present tuples (player, value)
         save_to_json: If True, save beliefs and value tracker to JSON files
         load_from_json: If True, attempt to load existing beliefs from JSON files
         
@@ -340,6 +529,10 @@ def run_irl_game_session(
         double_reveals = []
     if swaps is None:
         swaps = []
+    if signals is None:
+        signals = []
+    if not_present is None:
+        not_present = []
     
     # Validate wire length
     if len(my_wire) != config.wires_per_player:
@@ -391,12 +584,42 @@ def run_irl_game_session(
         loaded_from_file = True
 
     
+    # Determine which actions to process (incremental if both save and load are enabled)
+    calls_to_process = calls
+    reveals_to_process = double_reveals
+    swaps_to_process = swaps
+    signals_to_process = signals
+    not_present_to_process = not_present
+    processed_incrementally = False
+    
+    # If both save and load are enabled, only process new actions
+    if save_to_json and load_from_json and loaded_from_file:
+        old_history = load_action_history(belief_folder, my_player_id)
+        if old_history is not None:
+            # Only process actions that are new since last save
+            calls_to_process = get_new_actions(old_history.get("calls", []), calls)
+            reveals_to_process = get_new_actions(old_history.get("double_reveals", []), double_reveals)
+            swaps_to_process = get_new_actions(old_history.get("swaps", []), swaps)
+            signals_to_process = get_new_actions(old_history.get("signals", []), signals)
+            not_present_to_process = get_new_actions(old_history.get("not_present", []), not_present)
+            
+            if any([calls_to_process, reveals_to_process, swaps_to_process, 
+                   signals_to_process, not_present_to_process]):
+                processed_incrementally = True
+                print(f"\n⚡ Incremental update: Processing {len(calls_to_process)} new calls, "
+                      f"{len(reveals_to_process)} reveals, {len(swaps_to_process)} swaps, "
+                      f"{len(signals_to_process)} signals, {len(not_present_to_process)} not-present")
+            else:
+                print(f"\n✓ No new actions to process")
+    
     # Process all calls, double reveals, and swaps
     call_records = []
     reveal_records = []
     swap_records = []
+    signal_records = []
+    not_present_records = []
     
-    for call in calls:
+    for call in calls_to_process:
         try:
             # Convert call to internal format
             internal_call = convert_call_to_internal(call, player_names)
@@ -408,7 +631,7 @@ def run_irl_game_session(
             call_records.append(f"ERROR: {e}")
     
     # Process double reveals
-    for reveal in double_reveals:
+    for reveal in reveals_to_process:
         try:
             # Convert reveal to internal format
             internal_reveal = convert_double_reveal_to_internal(reveal, player_names)
@@ -420,7 +643,7 @@ def run_irl_game_session(
             reveal_records.append(f"ERROR: {e}")
     
     # Process swaps
-    for swap in swaps:
+    for swap in swaps_to_process:
         try:
             # Convert swap to internal format
             internal_swap = convert_swap_to_internal(swap, player_names, my_player_id)
@@ -447,14 +670,41 @@ def run_irl_game_session(
         except ValueError as e:
             swap_records.append(f"ERROR: {e}")
     
+    # Process signals
+    for signal in signals_to_process:
+        try:
+            # Convert signal to internal format
+            internal_signal = convert_signal_to_internal(signal, player_names)
+            player, val, pos = internal_signal
+            
+            signal_record = game.signal_value(player, val, pos)
+            signal_records.append(signal_record)
+        except ValueError as e:
+            signal_records.append(f"ERROR: {e}")
+    
+    # Process not-present announcements
+    for np in not_present_to_process:
+        try:
+            # Convert not-present to internal format
+            internal_np = convert_not_present_to_internal(np, player_names)
+            player, val = internal_np
+            
+            np_record = game.announce_not_present(player, val)
+            not_present_records.append(np_record)
+        except ValueError as e:
+            not_present_records.append(f"ERROR: {e}")
+    
     # Get game state
     state = game.get_game_state()
     
-    # Save belief state (only if save_to_json is True)
+    # Save belief state and action history (only if save_to_json is True)
     my_player = players[my_player_id]
     if save_to_json and my_player.belief_system is not None:
         try:
             my_player.belief_system.save_to_folder(belief_folder, player_names)
+            # Also save action history to enable incremental processing
+            save_action_history(belief_folder, my_player_id, 
+                              calls, double_reveals, swaps, signals, not_present)
         except Exception as e:
             print(f"⚠️  Warning: Could not save belief state: {e}")
     
@@ -466,7 +716,10 @@ def run_irl_game_session(
         'call_records': call_records,
         'reveal_records': reveal_records,
         'swap_records': swap_records,
+        'signal_records': signal_records,
+        'not_present_records': not_present_records,
         'loaded_from_file': loaded_from_file,
+        'processed_incrementally': processed_incrementally,
         'belief_folder': belief_folder,
         'player_names': player_names or {}
     }
@@ -497,14 +750,17 @@ def print_player_setup(players, my_player_id: int, player_names: Dict[int, str] 
             print(f"  {name}: Wire = [Unknown - physical cards]")
 
 
-def print_call_history(call_records, player_names: Dict[int, str] = None):
+def print_call_history(call_records, player_names: Dict[int, str] = None, only_recent: bool = False):
     """Print formatted call history."""
     print(f"\n" + "="*80)
-    print("CALL HISTORY")
+    if only_recent and call_records:
+        print("RECENTLY PROCESSED ACTIONS")
+    else:
+        print("CALL HISTORY")
     print("="*80)
     
     if not call_records:
-        print("\nNo calls yet. Add calls to the CALLS list.")
+        print("\nNo new actions processed.")
     else:
         for i, record in enumerate(call_records):
             if isinstance(record, str):  # Error message

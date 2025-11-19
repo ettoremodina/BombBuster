@@ -74,7 +74,14 @@ Assistant thoughts / caveats:
 
 
 
-
+## Debugging Swap function in belief_model.py for the ValueTracker (_update_value_trackers_for_swap)
+Something is not working correctly, here I list the operations that I need to perform to have a successfull swap
+1. every player has to update the value tracker, not only the one involved in the switching
+2. Revealed wires cannot be swapped, but they change relative position
+   1. for each revealed value that belongs to either one of the players involved in the swap update the position that got change due to the swap
+3. If a certain value got exchanged than I need to update both player and pos
+4. The other certain values need to update the position due to the swap (as the revealed ones)
+  
 ## r_k distance filtering 
 - once a value is revealed, I can also remove that value from positions that are more than r_k positions away
 - the distance filtering should take into account the current number of copies uncertain, not just the r_k
@@ -153,18 +160,6 @@ I want the implementation of the suggester to be moved in this class from #file:
 
 For now keep it real simple, I'll add more statistics and suggesters later
 
-# TO DO
-
-## DEBUG value tracker update on swap (hard)
-
-
-
-
-## CHECK ALL FILTERS INDIVIDUALLY
-- _apply_subset_cardinality_filter (difficult to test)
-- _apply_uncertain_position_value_filter (seems okay but needs more testing)
-
-
 # Future Ideass
 
 ## bombs cannot be signaled
@@ -207,10 +202,63 @@ then in case calls, swaps, double reveals in order
 
 
 
-## Debugging Swap function in belief_model.py for the ValueTracker (_update_value_trackers_for_swap)
-Something is not working correctly, here I list the operations that I need to perform to have a successfull swap
-1. every player has to update the value tracker, not only the one involved in the switching
-2. Revealed wires cannot be swapped, but they change relative position
-   1. for each revealed value that belongs to either one of the players involved in the swap update the position that got change due to the swap
-3. If a certain value got exchanged than I need to update both player and pos
-4. The other certain values need to update the position due to the swap (as the revealed ones)
+
+
+
+        # STEP 2: Anchor-based filtering
+        for player_id in range(self.config.n_players):
+            # Identify anchor positions (positions with single certain/revealed value)
+            anchors = {}  # value -> list of positions
+            for pos in range(W):
+                if len(self.beliefs[player_id][pos]) == 1:
+                    anchor_value = list(self.beliefs[player_id][pos])[0]
+                    if anchor_value not in anchors:
+                        anchors[anchor_value] = []
+                    anchors[anchor_value].append(pos)
+            
+            # For each value, apply constraints based on anchors
+            for value in self.config.wire_values:
+                remaining_copies = player_value_counts[player_id][value]
+                
+                if remaining_copies == 0:
+                    continue
+                
+                # Find the nearest higher value anchor (smallest position with value > current)
+                higher_anchor_pos = None
+                for anchor_val in sorted(anchors.keys()):
+                    if anchor_val > value:
+                        # Found a higher value, get its smallest position
+                        higher_anchor_pos = min(anchors[anchor_val])
+                        break
+                
+                # Find the nearest lower value anchor (largest position with value < current)
+                lower_anchor_pos = None
+                for anchor_val in sorted(anchors.keys(), reverse=True):
+                    if anchor_val < value:
+                        # Found a lower value, get its largest position
+                        lower_anchor_pos = max(anchors[anchor_val])
+                        break
+                
+                # Apply constraint from higher anchor (working backwards)
+                if higher_anchor_pos is not None:
+                    # This value must fit in the remaining_copies positions before higher_anchor_pos
+                    # So it cannot appear before position (higher_anchor_pos - remaining_copies)
+                    min_pos = higher_anchor_pos - remaining_copies
+                    for pos in range(0, min_pos):
+                        if pos < W:
+                            before_size = len(self.beliefs[player_id][pos])
+                            self.beliefs[player_id][pos].discard(value)
+                            if len(self.beliefs[player_id][pos]) < before_size:
+                                changed = True
+                
+                # Apply constraint from lower anchor (working forwards)
+                if lower_anchor_pos is not None:
+                    # This value must fit in the remaining_copies positions after lower_anchor_pos
+                    # So it cannot appear after position (lower_anchor_pos + remaining_copies)
+                    max_pos = lower_anchor_pos + remaining_copies
+                    for pos in range(max_pos, W):
+                        before_size = len(self.beliefs[player_id][pos])
+                        self.beliefs[player_id][pos].discard(value)
+                        if len(self.beliefs[player_id][pos]) < before_size:
+                            changed = True
+        

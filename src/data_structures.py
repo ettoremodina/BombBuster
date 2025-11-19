@@ -93,6 +93,46 @@ class SwapRecord:
 
 
 @dataclass
+class SignalRecord:
+    """
+    Public record of a player signaling they have a certain value at a specific position.
+    This is a direct announcement of knowledge, useful for speeding up IRL gameplay.
+    
+    Attributes:
+        player_id: ID of the player making the signal
+        value: The value at the position (can be int or float)
+        position: Wire position being signaled (0-indexed)
+        turn_number: Game turn when this signal was made
+    """
+    player_id: int
+    value: Union[int, float]
+    position: int
+    turn_number: Optional[int] = None
+    
+    def __repr__(self):
+        return f"Turn {self.turn_number}: P{self.player_id} SIGNALS [{self.position}]={self.value}"
+
+
+@dataclass
+class NotPresentRecord:
+    """
+    Public record of a player announcing they don't have a specific value.
+    This allows removing a value from all of a player's possible positions.
+    
+    Attributes:
+        player_id: ID of the player making the announcement
+        value: The value they don't have (can be int or float)
+        turn_number: Game turn when this announcement was made
+    """
+    player_id: int
+    value: Union[int, float]
+    turn_number: Optional[int] = None
+    
+    def __repr__(self):
+        return f"Turn {self.turn_number}: P{self.player_id} NOT PRESENT value={self.value}"
+
+
+@dataclass
 class GameObservation:
     """
     All information available to a single player.
