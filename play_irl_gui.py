@@ -684,6 +684,16 @@ class SwapActionPanel(ActionPanel):
         self.create_position_buttons(self, "Final Position (P1):", "final_pos1")
         self.create_position_buttons(self, "Final Position (P2):", "final_pos2")
         
+        # Received value (only needed if I'm one of the players)
+        self.received_value_frame = tk.Frame(self, bg="#FFF8DC", padx=10, pady=10, relief=tk.GROOVE, borderwidth=1)
+        self.received_value_frame.pack(fill=tk.X, pady=10, padx=5)
+        tk.Label(self.received_value_frame, text="Value I Received (if I'm involved):", 
+                bg="#FFF8DC", font=("Arial", 10, "bold")).pack()
+        self.create_value_buttons(self.received_value_frame, "", "received_value")
+        
+        tk.Label(self, text="ℹ️ Only select received value if you are Player 1 or Player 2",
+                font=("Arial", 9, "italic"), fg="#666666").pack(pady=5)
+        
         # Buttons
         button_frame = tk.Frame(self)
         button_frame.pack(pady=20)
@@ -699,17 +709,37 @@ class SwapActionPanel(ActionPanel):
             messagebox.showwarning("Incomplete", "Please complete all fields")
             return
         
-        p1 = self.app.player_names[self.selections["player1"]]
-        p2 = self.app.player_names[self.selections["player2"]]
+        p1_id = self.selections["player1"]
+        p2_id = self.selections["player2"]
+        p1 = self.app.player_names[p1_id]
+        p2 = self.app.player_names[p2_id]
         
-        # Convert to 1-indexed
-        action = (
-            p1, p2,
-            self.selections["init_pos1"] + 1,
-            self.selections["init_pos2"] + 1,
-            self.selections["final_pos1"] + 1,
-            self.selections["final_pos2"] + 1
-        )
+        # Check if I'm involved in the swap
+        i_am_involved = (p1_id == self.app.my_player_id or p2_id == self.app.my_player_id)
+        
+        # If I'm involved, received_value is required
+        if i_am_involved and "received_value" not in self.selections:
+            messagebox.showwarning("Incomplete", "Please select the value you received (since you're involved in the swap)")
+            return
+        
+        # Convert to 1-indexed and build action tuple
+        if i_am_involved:
+            action = (
+                p1, p2,
+                self.selections["init_pos1"] + 1,
+                self.selections["init_pos2"] + 1,
+                self.selections["final_pos1"] + 1,
+                self.selections["final_pos2"] + 1,
+                self.selections["received_value"]
+            )
+        else:
+            action = (
+                p1, p2,
+                self.selections["init_pos1"] + 1,
+                self.selections["init_pos2"] + 1,
+                self.selections["final_pos1"] + 1,
+                self.selections["final_pos2"] + 1
+            )
         
         self.app.add_action("swap", action)
         self.clear()
