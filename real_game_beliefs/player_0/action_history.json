@@ -1,22 +1,51 @@
 {
   "calls": [
     [
-      "Gorgo",
+      "Ettore",
+      "Brini",
+      13,
+      13,
+      true
+    ],
+    [
+      "Ettore",
       "Frodo",
-      12,
+      13,
+      13,
+      true
+    ],
+    [
+      "Ettore",
+      "Brini",
       11,
+      12,
+      true
+    ],
+    [
+      "Brini",
+      "Frodo",
+      1,
+      1,
       true,
-      12
+      1
     ]
   ],
   "double_reveals": [],
-  "swaps": [],
-  "signals": [
+  "swaps": [
     [
-      "Gorgo",
-      11,
+      "Ettore",
+      "Brini",
+      9,
+      9,
+      10,
       12
     ]
   ],
-  "not_present": []
+  "signals": [],
+  "not_present": [
+    [
+      "Frodo",
+      2
+    ]
+  ]
 }

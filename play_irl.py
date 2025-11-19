@@ -35,7 +35,7 @@ from src.utils import (
 # ============================================================================
 
 # Your wire (the cards you're holding)
-MY_WIRE = [1,2,3,3,5,7,7,8,8,9,9,10,11]
+MY_WIRE = [1,2,3,4,5,6,7,8,9,10]
 
 # Your player ID (0, 1, 2, 3, ...)
 MY_PLAYER_ID = 0
@@ -46,7 +46,7 @@ PLAYER_NAMES = {
     0: "Ettore",
     1: "Brini", 
     2: "Frodo",
-    # 3: "Ricky",
+    3: "Ricky",
     3: "Gorgo"
 }
 
@@ -55,7 +55,7 @@ BELIEF_FOLDER = "real_game_beliefs"
 
 # Control saving and loading of beliefs and value tracker
 SAVE_TO_JSON = True   # Set to False to disable saving beliefs to JSON files
-LOAD_FROM_JSON = True  # Set to False to start fresh (ignore existing JSON files)
+LOAD_FROM_JSON = False  # Set to False to start fresh (ignore existing JSON files)
 
 # ============================================================================
 # CALL HISTORY - Add calls here as they happen
@@ -63,34 +63,6 @@ LOAD_FROM_JSON = True  # Set to False to start fresh (ignore existing JSON files
 # Format: (caller, target, position, value, success, [caller_position])
 
 CALLS = [
-    ("Ettore","Brini",13,13,True),
-    ("Ettore","Frodo",13,13,True),
-
-    ("Ettore", "Gorgo",4,6,True),
-    ("Ettore", "Frodo",11,12,True),
-    ("Ettore", "Brini",9,7,True),
-    ("Brini", "Ettore",12,10,True),
-
-    ("Gorgo", "Ettore", 10, 12, True, 9),
-    ("Frodo", "Brini",1,1,True,1),
-    ("Brini", "Gorgo",4,6,True,8),
-    ("Ettore", "Gorgo",1,1,False),
-
-    ("Gorgo", "Frodo", 11,12,True,12),
-    ("Frodo", "Frodo",11,11,True,9),
-    ("Brini", "Ettore",1,1,True,2),
-    # ("Ettore", ""),
-
-    
-    # ("Gorgo", ""),
-    # ("Frodo", ""),
-    # ("Brini", ""),
-    # ("Ettore", ""),
-    
-
-
-
-    # ("Brini","Gorfo",3,3,True),
     
 ]
 
@@ -102,6 +74,8 @@ CALLS = [
 
 DOUBLE_REVEALS = [
     
+    # ("Brini", 11,7,8),
+    # ("Brini", 11,5,6)
 ]
 
 # ============================================================================
@@ -122,6 +96,7 @@ SWAPS = [
 # Positions are 1-indexed (1, 2, 3, ...)
 
 SIGNALS = [
+    ("Brini", 12, 9)
     
 ]
 
@@ -147,7 +122,7 @@ def main():
     config = GameConfig(playing_irl=True)
     
     # Print header
-    print_game_header(config)
+    # print_game_header(config)
     
     # Run game session
     try:
@@ -179,7 +154,7 @@ def main():
     player_names = result['player_names']
     
     # Print player setup
-    print_player_setup(players, MY_PLAYER_ID, player_names)
+    # print_player_setup(players, MY_PLAYER_ID, player_names)
     
     # Show if loaded from previous session
     if loaded_from_file:
@@ -198,19 +173,19 @@ def main():
         print_call_history(call_records, player_names, only_recent=processed_incrementally)
     
     # Print game state
-    print_game_state(state, config)
+    # print_game_state(state, config)
     
     # Print your information and suggestions
-    print_player_info(my_player, MY_PLAYER_ID, state, player_names, config)
+    # print_player_info(my_player, MY_PLAYER_ID, state, player_names, config)
     
     # Print belief state
     print_belief_state(my_player, BELIEF_FOLDER, MY_PLAYER_ID, player_names, config)
 
     # Print statistics
-    print_statistics(my_player, player_names, config)
+    # print_statistics(my_player, player_names, config)
     
     # Print session complete
-    print_session_complete(BELIEF_FOLDER)
+    # print_session_complete(BELIEF_FOLDER)
 
 
 

@@ -737,9 +737,9 @@ class BeliefModel:
                 if player_id in tracker.called:
                     uncertain_for_player += 1
                 # add back certain and revealed count if they belong to that player
-                certain_count = sum(1 for p, pos in tracker.certain if p == player_id)
-                revealed_count = sum(1 for p, pos in tracker.revealed if p == player_id)
-                uncertain_for_player += certain_count + revealed_count
+                # certain_count = sum(1 for p, pos in tracker.certain if p == player_id)
+                # revealed_count = sum(1 for p, pos in tracker.revealed if p == player_id)
+                # uncertain_for_player += certain_count + revealed_count
                 
                 player_adjustments[player_id][value] = uncertain_for_player
         
@@ -752,57 +752,61 @@ class BeliefModel:
                     # This player has 0 copies of this value - eliminate from ALL positions
                     for pos in range(W):
                         before_size = len(self.beliefs[player_id][pos])
-                        self.beliefs[player_id][pos].discard(value)
+                        if before_size > 1:
+                            self.beliefs[player_id][pos].discard(value)
                         if len(self.beliefs[player_id][pos]) < before_size:
                             changed = True
         
-        # STEP 2: Position constraints - high values with few uncertain copies cannot appear too early
-        # Build threshold: position before which this value cannot appear
-        for player_id in range(self.config.n_players):
-            threshold = W
-            for value in sorted(self.config.wire_values, reverse=True):
-                uncertain_copies = player_adjustments[player_id][value]
-                
-                # Skip zero-copy case (already handled by existence filter)
-                if uncertain_copies == 0:
-                    continue
-                
-                threshold -= uncertain_copies
-                
-                # Clamp threshold to valid range [0, W)
-                if threshold > 0 and threshold < W:
-                    # Eliminate this value from positions [0, threshold)
-                    for pos in range(0, min(threshold, W)):
-                        if pos < len(self.beliefs[player_id]):  # Safety check
-                            before_size = len(self.beliefs[player_id][pos])
-                            self.beliefs[player_id][pos].discard(value)
-                            if len(self.beliefs[player_id][pos]) < before_size:
-                                changed = True
-        
-        # STEP 3: Position constraints - low values with few uncertain copies cannot appear too late
-        # Build threshold: position after which this value cannot appear
-        for player_id in range(self.config.n_players):
-            threshold = 0
-            for value in sorted(self.config.wire_values):
-                uncertain_copies = player_adjustments[player_id][value]
-                
-                # Skip zero-copy case (already handled by existence filter)
-                if uncertain_copies == 0:
-                    continue
-                
-                threshold += uncertain_copies
-                
-                # Clamp threshold to valid range (0, W]
-                if threshold > 0 and threshold < W:
-                    # Eliminate this value from positions [threshold, W)
-                    for pos in range(max(0, threshold), W):
-                        if pos < len(self.beliefs[player_id]):  # Safety check
-                            before_size = len(self.beliefs[player_id][pos])
-                            self.beliefs[player_id][pos].discard(value)
-                            if len(self.beliefs[player_id][pos]) < before_size:
-                                changed = True
-        
         return changed
+    
+    # def _apply_position_value_filter(self) -> bool:
+    #     # STEP 2: Position constraints - high values with few uncertain copies cannot appear too early
+    #     # Build threshold: position before which this value cannot appear
+    #     for player_id in range(self.config.n_players):
+    #         threshold = W
+    #         for value in sorted(self.config.wire_values, reverse=True):
+    #             uncertain_copies = player_adjustments[player_id][value]
+                
+    #             # Skip zero-copy case (already handled by existence filter)
+    #             if uncertain_copies == 0:
+    #                 continue
+                
+    #             threshold -= uncertain_copies
+                
+    #             # Clamp threshold to valid range [0, W)
+    #             if threshold > 0 and threshold < W:
+    #                 # Eliminate this value from positions [0, threshold)
+    #                 for pos in range(0, min(threshold, W)):
+    #                     if pos < len(self.beliefs[player_id]):  # Safety check
+    #                         before_size = len(self.beliefs[player_id][pos])
+    #                         self.beliefs[player_id][pos].discard(value)
+    #                         if len(self.beliefs[player_id][pos]) < before_size:
+    #                             changed = True
+        
+    #     # STEP 3: Position constraints - low values with few uncertain copies cannot appear too late
+    #     # Build threshold: position after which this value cannot appear
+    #     for player_id in range(self.config.n_players):
+    #         threshold = 0
+    #         for value in sorted(self.config.wire_values):
+    #             uncertain_copies = player_adjustments[player_id][value]
+                
+    #             # Skip zero-copy case (already handled by existence filter)
+    #             if uncertain_copies == 0:
+    #                 continue
+                
+    #             threshold += uncertain_copies
+                
+    #             # Clamp threshold to valid range (0, W]
+    #             if threshold > 0 and threshold < W:
+    #                 # Eliminate this value from positions [threshold, W)
+    #                 for pos in range(max(0, threshold), W):
+    #                     if pos < len(self.beliefs[player_id]):  # Safety check
+    #                         before_size = len(self.beliefs[player_id][pos])
+    #                         self.beliefs[player_id][pos].discard(value)
+    #                         if len(self.beliefs[player_id][pos]) < before_size:
+    #                             changed = True
+    #     return changed
+        
     
     def is_consistent(self) -> bool:
         """
