@@ -2,12 +2,14 @@
 
 ## CHECK ALL FILTERS INDIVIDUALLY
 - _apply_subset_cardinality_filter (difficult to test)
-- _apply_uncertain_position_value_filter: debug, la logica va ripensata, non deve contare i revealed e deve saltare le celle certain e revealed
+
 
 ## TEST SWAPPING
 - it works, but I don't know if the belief system and value tracker is correctly updated in all cases
 - it is no longer markovian when using swapping, because the history of swaps matters
 
+## last filter for impossible values
+- anchors and stuff
 
 # DONE
 

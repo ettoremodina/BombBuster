@@ -1,6 +1,11 @@
 {
   "1": {
-    "revealed": [],
+    "revealed": [
+      [
+        "Brini",
+        0
+      ]
+    ],
     "certain": [
       [
         "Ettore",
@@ -8,7 +13,7 @@
       ]
     ],
     "called": [],
-    "uncertain": "3/4"
+    "uncertain": "2/4"
   },
   "2": {
     "revealed": [],
@@ -33,8 +38,10 @@
         3
       ]
     ],
-    "called": [],
-    "uncertain": "2/4"
+    "called": [
+      "Gorgo"
+    ],
+    "uncertain": "1/4"
   },
   "3.5": {
     "revealed": [],
@@ -43,19 +50,10 @@
     "uncertain": "1/1"
   },
   "4": {
-    "revealed": [
-      [
-        "Brini",
-        4
-      ],
-      [
-        "Brini",
-        3
-      ]
-    ],
+    "revealed": [],
     "certain": [],
     "called": [],
-    "uncertain": "2/4"
+    "uncertain": "4/4"
   },
   "5": {
     "revealed": [],
@@ -69,25 +67,25 @@
     "uncertain": "3/4"
   },
   "6": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "4/4"
+  },
+  "6.5": {
     "revealed": [
       [
-        "Gorgo",
-        6
+        "Frodo",
+        8
       ],
       [
-        "Frodo",
-        7
+        "Gorgo",
+        9
       ]
     ],
     "certain": [],
     "called": [],
-    "uncertain": "2/4"
-  },
-  "6.5": {
-    "revealed": [],
-    "certain": [],
-    "called": [],
-    "uncertain": "1/1"
+    "uncertain": "-1/1"
   },
   "7": {
     "revealed": [],
@@ -105,16 +103,7 @@
     "uncertain": "2/4"
   },
   "8": {
-    "revealed": [
-      [
-        "Frodo",
-        8
-      ],
-      [
-        "Brini",
-        5
-      ]
-    ],
+    "revealed": [],
     "certain": [
       [
         "Ettore",
@@ -126,19 +115,10 @@
       ]
     ],
     "called": [],
-    "uncertain": "0/4"
+    "uncertain": "2/4"
   },
   "9": {
-    "revealed": [
-      [
-        "Frodo",
-        9
-      ],
-      [
-        "Brini",
-        6
-      ]
-    ],
+    "revealed": [],
     "certain": [
       [
         "Ettore",
@@ -150,7 +130,7 @@
       ]
     ],
     "called": [],
-    "uncertain": "0/4"
+    "uncertain": "2/4"
   },
   "10": {
     "revealed": [],
@@ -161,7 +141,7 @@
       ],
       [
         "Gorgo",
-        8
+        10
       ]
     ],
     "called": [],
@@ -179,37 +159,24 @@
     "uncertain": "3/4"
   },
   "12": {
-    "revealed": [
-      [
-        "Frodo",
-        12
-      ],
-      [
-        "Gorgo",
-        10
-      ]
-    ],
-    "certain": [
-      [
-        "Gorgo",
-        11
-      ]
-    ],
+    "revealed": [],
+    "certain": [],
     "called": [],
-    "uncertain": "1/4"
+    "uncertain": "4/4"
   },
   "13": {
     "revealed": [
       [
-        "Brini",
-        12
-      ],
-      [
         "Gorgo",
         12
       ]
     ],
-    "certain": [],
+    "certain": [
+      [
+        "Frodo",
+        12
+      ]
+    ],
     "called": [],
     "uncertain": "0/2"
   }

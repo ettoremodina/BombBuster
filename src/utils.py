@@ -415,7 +415,7 @@ def format_call_for_user(call_record, player_names: Dict[int, str] = None) -> st
 def save_action_history(belief_folder: str, player_id: int, 
                        calls: List[Tuple], double_reveals: List[Tuple],
                        swaps: List[Tuple], signals: List[Tuple],
-                       not_present: List[Tuple]):
+                       reveals: List[Tuple], not_present: List[Tuple]):
     """
     Save the action history to track what has been processed.
     
@@ -426,6 +426,7 @@ def save_action_history(belief_folder: str, player_id: int,
         double_reveals: List of double reveal tuples
         swaps: List of swap tuples
         signals: List of signal tuples
+        reveals: List of reveal tuples
         not_present: List of not-present tuples
     """
     from pathlib import Path
@@ -441,6 +442,7 @@ def save_action_history(belief_folder: str, player_id: int,
         "double_reveals": double_reveals,
         "swaps": swaps,
         "signals": signals,
+        "reveals": reveals,
         "not_present": not_present
     }
     
@@ -496,6 +498,7 @@ def run_irl_game_session(
     double_reveals: List[Tuple] = None,
     swaps: List[Tuple] = None,
     signals: List[Tuple] = None,
+    reveals: List[Tuple] = None,
     not_present: List[Tuple] = None,
     save_to_json: bool = True,
     load_from_json: bool = True
@@ -513,6 +516,7 @@ def run_irl_game_session(
         double_reveals: Optional list of double reveal tuples (player, value, pos1, pos2)
         swaps: Optional list of swap tuples (player1, player2, init_pos1, init_pos2, final_pos1, final_pos2)
         signals: Optional list of signal tuples (player, value, position)
+        reveals: Optional list of reveal tuples (player, value, position)
         not_present: Optional list of not-present tuples (player, value)
         save_to_json: If True, save beliefs and value tracker to JSON files
         load_from_json: If True, attempt to load existing beliefs from JSON files
@@ -531,6 +535,8 @@ def run_irl_game_session(
         swaps = []
     if signals is None:
         signals = []
+    if reveals is None:
+        reveals = []
     if not_present is None:
         not_present = []
     
@@ -586,9 +592,10 @@ def run_irl_game_session(
     
     # Determine which actions to process (incremental if both save and load are enabled)
     calls_to_process = calls
-    reveals_to_process = double_reveals
+    double_reveals_to_process = double_reveals
     swaps_to_process = swaps
     signals_to_process = signals
+    reveals_to_process = reveals
     not_present_to_process = not_present
     processed_incrementally = False
     
@@ -598,25 +605,28 @@ def run_irl_game_session(
         if old_history is not None:
             # Only process actions that are new since last save
             calls_to_process = get_new_actions(old_history.get("calls", []), calls)
-            reveals_to_process = get_new_actions(old_history.get("double_reveals", []), double_reveals)
+            double_reveals_to_process = get_new_actions(old_history.get("double_reveals", []), double_reveals)
             swaps_to_process = get_new_actions(old_history.get("swaps", []), swaps)
             signals_to_process = get_new_actions(old_history.get("signals", []), signals)
+            reveals_to_process = get_new_actions(old_history.get("reveals", []), reveals)
             not_present_to_process = get_new_actions(old_history.get("not_present", []), not_present)
             
-            if any([calls_to_process, reveals_to_process, swaps_to_process, 
-                   signals_to_process, not_present_to_process]):
+            if any([calls_to_process, double_reveals_to_process, swaps_to_process, 
+                   signals_to_process, reveals_to_process, not_present_to_process]):
                 processed_incrementally = True
                 print(f"\n⚡ Incremental update: Processing {len(calls_to_process)} new calls, "
-                      f"{len(reveals_to_process)} reveals, {len(swaps_to_process)} swaps, "
-                      f"{len(signals_to_process)} signals, {len(not_present_to_process)} not-present")
+                      f"{len(double_reveals_to_process)} double reveals, {len(swaps_to_process)} swaps, "
+                      f"{len(signals_to_process)} signals, {len(reveals_to_process)} reveals, "
+                      f"{len(not_present_to_process)} not-present")
             else:
                 print(f"\n✓ No new actions to process")
     
-    # Process all calls, double reveals, and swaps
+    # Process all calls, double reveals, swaps, signals, reveals, and not-present announcements
     call_records = []
-    reveal_records = []
+    double_reveal_records = []
     swap_records = []
     signal_records = []
+    reveal_records = []
     not_present_records = []
     
     for call in calls_to_process:
@@ -631,16 +641,16 @@ def run_irl_game_session(
             call_records.append(f"ERROR: {e}")
     
     # Process double reveals
-    for reveal in reveals_to_process:
+    for reveal in double_reveals_to_process:
         try:
             # Convert reveal to internal format
             internal_reveal = convert_double_reveal_to_internal(reveal, player_names)
             player, val, pos1, pos2 = internal_reveal
             
             reveal_record = game.double_reveal(player, val, pos1, pos2)
-            reveal_records.append(reveal_record)
+            double_reveal_records.append(reveal_record)
         except ValueError as e:
-            reveal_records.append(f"ERROR: {e}")
+            double_reveal_records.append(f"ERROR: {e}")
     
     # Process swaps
     for swap in swaps_to_process:
@@ -682,6 +692,18 @@ def run_irl_game_session(
         except ValueError as e:
             signal_records.append(f"ERROR: {e}")
     
+    # Process reveals
+    for reveal in reveals_to_process:
+        try:
+            # Convert reveal to internal format (same format as signal)
+            internal_reveal = convert_signal_to_internal(reveal, player_names)
+            player, val, pos = internal_reveal
+            
+            reveal_record = game.reveal_value(player, val, pos)
+            reveal_records.append(reveal_record)
+        except ValueError as e:
+            reveal_records.append(f"ERROR: {e}")
+    
     # Process not-present announcements
     for np in not_present_to_process:
         try:
@@ -704,7 +726,7 @@ def run_irl_game_session(
             my_player.belief_system.save_to_folder(belief_folder, player_names)
             # Also save action history to enable incremental processing
             save_action_history(belief_folder, my_player_id, 
-                              calls, double_reveals, swaps, signals, not_present)
+                              calls, double_reveals, swaps, signals, reveals, not_present)
         except Exception as e:
             print(f"⚠️  Warning: Could not save belief state: {e}")
     
@@ -714,9 +736,10 @@ def run_irl_game_session(
         'my_player': my_player,
         'state': state,
         'call_records': call_records,
-        'reveal_records': reveal_records,
+        'double_reveal_records': double_reveal_records,
         'swap_records': swap_records,
         'signal_records': signal_records,
+        'reveal_records': reveal_records,
         'not_present_records': not_present_records,
         'loaded_from_file': loaded_from_file,
         'processed_incrementally': processed_incrementally,

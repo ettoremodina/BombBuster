@@ -53,6 +53,7 @@ class BombBusterGUI:
         self.double_reveals = []
         self.swaps = []
         self.signals = []
+        self.reveals = []
         self.not_present = []
         
         # Game objects
@@ -73,6 +74,7 @@ class BombBusterGUI:
                 self.double_reveals = old_history.get("double_reveals", [])
                 self.swaps = old_history.get("swaps", [])
                 self.signals = old_history.get("signals", [])
+                self.reveals = old_history.get("reveals", [])
                 self.not_present = old_history.get("not_present", [])
         
         # Initialize game
@@ -93,6 +95,7 @@ class BombBusterGUI:
             double_reveals=self.double_reveals,
             swaps=self.swaps,
             signals=self.signals,
+            reveals=self.reveals,
             not_present=self.not_present,
             save_to_json=self.auto_save,
             load_from_json=self.load_existing
@@ -383,6 +386,8 @@ class BombBusterGUI:
                 self.double_reveals.append(action_data)
             elif action_type == "signal":
                 self.signals.append(action_data)
+            elif action_type == "reveal":
+                self.reveals.append(action_data)
             elif action_type == "not_present":
                 self.not_present.append(action_data)
             
@@ -796,19 +801,30 @@ class SignalActionPanel(ActionPanel):
         
         self.create_value_buttons(self, "Value:", "value")
         
-        tk.Label(self, text="ℹ️ Use when a player announces they know a specific wire",
+        # Action type selector
+        type_frame = tk.Frame(self, bg="#E8F5E9", padx=10, pady=10, relief=tk.GROOVE, borderwidth=1)
+        type_frame.pack(fill=tk.X, pady=10, padx=5)
+        tk.Label(type_frame, text="Action Type:", width=12, anchor=tk.W, bg="#E8F5E9", font=("Arial", 10, "bold")).pack(side=tk.LEFT)
+        
+        self.action_type_var = tk.StringVar(value="signal")
+        tk.Radiobutton(type_frame, text="SIGNAL (Certain)", variable=self.action_type_var, 
+                      value="signal", bg="#E8F5E9", font=("Arial", 10)).pack(side=tk.LEFT, padx=10)
+        tk.Radiobutton(type_frame, text="REVEAL (Show)", variable=self.action_type_var, 
+                      value="reveal", bg="#E8F5E9", font=("Arial", 10)).pack(side=tk.LEFT, padx=10)
+        
+        tk.Label(self, text="ℹ️ Use SIGNAL when deduced, REVEAL when shown to others",
                 font=("Arial", 9, "italic"), fg="#666666").pack(pady=5)
         
         # Buttons
         button_frame = tk.Frame(self)
         button_frame.pack(pady=20)
-        tk.Button(button_frame, text="ADD SIGNAL", command=self.add_signal,
+        tk.Button(button_frame, text="ADD ACTION", command=self.add_signal,
                  bg="#4CAF50", fg="white", padx=30, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
         tk.Button(button_frame, text="CLEAR", command=self.clear,
                  bg="#F44336", fg="white", padx=20, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
     
     def add_signal(self):
-        """Add the signal action."""
+        """Add the signal or reveal action."""
         required = ["player", "value", "position"]
         if not all(k in self.selections for k in required):
             messagebox.showwarning("Incomplete", "Please complete all fields")
@@ -820,12 +836,15 @@ class SignalActionPanel(ActionPanel):
         
         action = (player, value, position)
         
-        self.app.add_action("signal", action)
+        # Determine action type based on radio button selection
+        action_type = self.action_type_var.get()
+        self.app.add_action(action_type, action)
         self.clear()
     
     def clear(self):
         """Clear all selections."""
         self.clear_selections()
+        self.action_type_var.set("signal")
 
 
 class NotPresentActionPanel(ActionPanel):
@@ -880,35 +899,32 @@ class BeliefViewPanel(tk.Frame):
     """Panel for viewing all player beliefs."""
     
     def __init__(self, parent, app):
-        super().__init__(parent, relief=tk.RIDGE, borderwidth=2)
+        super().__init__(parent)
         self.app = app
         
-        tk.Label(self, text="BELIEF SYSTEM VIEW", font=("Arial", 14, "bold"), fg="#333333").pack(pady=10)
+        # Header
+        header_frame = tk.Frame(self, bg="#FAFAFA", relief=tk.RIDGE, borderwidth=2)
+        header_frame.pack(fill=tk.X, padx=5, pady=5)
+        tk.Label(header_frame, text="BELIEF SYSTEM VIEW", font=("Arial", 14, "bold"), 
+                fg="#333333", bg="#FAFAFA").pack(pady=10)
         
-        # Scrollable container
-        self.canvas = tk.Canvas(self)
-        self.scrollbar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas)
-        
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        )
-        
-        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-        
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.scrollbar.pack(side="right", fill="y")
+        # Container for player hands (no internal scrollbar)
+        self.player_container = tk.Frame(self, bg="white")
+        self.player_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Create frames for each player
         self.player_frames = {}
         self.setup_player_views()
+    
+    def _on_canvas_configure(self, event):
+        """Handle canvas resize to adjust inner frame width."""
+        # Not needed anymore since we removed the internal canvas
+        pass
         
     def setup_player_views(self):
         """Create view frames for all other players."""
         # Clear existing
-        for widget in self.scrollable_frame.winfo_children():
+        for widget in self.player_container.winfo_children():
             widget.destroy()
         self.player_frames = {}
             
@@ -916,8 +932,9 @@ class BeliefViewPanel(tk.Frame):
             if pid == self.app.my_player_id:
                 continue
                 
-            frame = tk.Frame(self.scrollable_frame, relief=tk.GROOVE, borderwidth=1, padx=10, pady=10, bg="#FAFAFA")
-            frame.pack(fill=tk.X, pady=5, padx=10)
+            frame = tk.Frame(self.player_container, relief=tk.GROOVE, borderwidth=2, 
+                           padx=15, pady=15, bg="#FAFAFA")
+            frame.pack(fill=tk.X, pady=10, padx=20)
             
             self.player_frames[pid] = frame
             

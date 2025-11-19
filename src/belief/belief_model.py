@@ -136,8 +136,29 @@ class BeliefModel:
         # Set the belief for this position to the signaled value (revealed)
         self.beliefs[player_id][position] = {value}
         
-        # Add to certain     in value tracker
+        # Add to certain in value tracker
         self.value_trackers[value].add_certain(player_id, position)
+        
+        # Apply filters to deduce new information
+        self.apply_filters()
+    
+    def process_reveal(self, signal_record: SignalRecord):
+        """
+        Update beliefs based on a player revealing a position.
+        Similar to signal but marks the position as revealed instead of certain.
+        
+        Args:
+            signal_record: The reveal action (uses SignalRecord structure)
+        """
+        player_id = signal_record.player_id
+        value = signal_record.value
+        position = signal_record.position
+        
+        # Set the belief for this position to the revealed value
+        self.beliefs[player_id][position] = {value}
+        
+        # Add to revealed in value tracker
+        self.value_trackers[value].add_revealed(player_id, position)
         
         # Apply filters to deduce new information
         self.apply_filters()

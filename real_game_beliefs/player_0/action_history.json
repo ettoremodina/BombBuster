@@ -2,60 +2,56 @@
   "calls": [
     [
       "Gorgo",
-      "Frodo",
-      13,
-      12,
-      true,
-      11
-    ],
-    [
-      "Gorgo",
       "Brini",
-      13,
-      13,
-      true,
-      13
-    ],
-    [
-      "Brini",
-      "Frodo",
-      10,
-      9,
-      true,
-      7
-    ],
-    [
-      "Brini",
-      "Frodo",
-      9,
-      8,
-      true,
-      6
-    ],
-    [
-      "Frodo",
-      "Gorgo",
-      7,
-      6,
-      true,
-      8
+      2,
+      3,
+      false
     ]
   ],
-  "double_reveals": [
-    [
-      "Brini",
-      4,
-      5,
-      4
-    ]
-  ],
+  "double_reveals": [],
   "swaps": [],
   "signals": [
     [
       "Gorgo",
       10,
-      9
+      11
+    ],
+    [
+      "Frodo",
+      13,
+      13
     ]
   ],
-  "not_present": []
+  "reveals": [
+    [
+      "Brini",
+      1,
+      1
+    ],
+    [
+      "Frodo",
+      6.5,
+      9
+    ],
+    [
+      "Gorgo",
+      6.5,
+      10
+    ],
+    [
+      "Gorgo",
+      13,
+      13
+    ]
+  ],
+  "not_present": [
+    [
+      "Frodo",
+      1
+    ],
+    [
+      "Gorgo",
+      10
+    ]
+  ]
 }

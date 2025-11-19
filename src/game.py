@@ -205,6 +205,44 @@ class Game:
         
         return signal_record
     
+    def reveal_value(self, player_id: int, value: Union[int, float], position: int) -> SignalRecord:
+        """
+        Process a reveal where a player reveals a specific value at a position.
+        Similar to signal but marks the position as revealed instead of certain.
+        
+        Args:
+            player_id: ID of the player revealing
+            value: The value at the position (can be int or float)
+            position: Wire position being revealed (0-indexed)
+        
+        Returns:
+            SignalRecord with the result
+        
+        Raises:
+            ValueError: If the reveal is invalid
+        """
+        # Validate the reveal (uses same validation as signal)
+        self._validate_signal(player_id, value, position)
+        
+        # Create signal record (reuse structure)
+        reveal_record = SignalRecord(
+            player_id=player_id,
+            value=value,
+            position=position,
+            turn_number=self.current_turn
+        )
+        
+        # Broadcast to all players (use reveal processing)
+        self._broadcast_reveal(reveal_record)
+        
+        # Check win condition
+        self._check_win_condition()
+        
+        # Increment turn
+        self.current_turn += 1
+        
+        return reveal_record
+    
     def _validate_signal(self, player_id: int, value: Union[int, float], position: int):
         """
         Validate that a signal is legal according to game rules.
@@ -250,6 +288,18 @@ class Game:
         for player in self.players:
             if player.belief_system is not None:
                 player.belief_system.process_signal(signal_record)
+    
+    def _broadcast_reveal(self, reveal_record: SignalRecord):
+        """
+        Broadcast a reveal to all players so they can update their beliefs.
+        
+        Args:
+            reveal_record: The reveal to broadcast
+        """
+        # Each player's belief system processes the reveal
+        for player in self.players:
+            if player.belief_system is not None:
+                player.belief_system.process_reveal(reveal_record)
     
     def announce_not_present(self, player_id: int, value: Union[int, float]) -> NotPresentRecord:
         """
