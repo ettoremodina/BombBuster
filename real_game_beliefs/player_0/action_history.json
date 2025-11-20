@@ -1,256 +1,43 @@
 {
-  "calls": [
-    [
-      "Brini",
-      "Frodo",
-      5,
-      5,
-      true,
-      5
-    ],
-    [
-      "Ettore",
-      "Gorgo",
-      1,
-      1,
-      true,
-      1
-    ],
-    [
-      "Andre",
-      "Brini",
-      10,
-      10,
-      true,
-      10
-    ],
-    [
-      "Gorgo",
-      "Ettore",
-      5,
-      6,
-      true,
-      5
-    ],
-    [
-      "Frodo",
-      "Andre",
-      2,
-      2,
-      true,
-      1
-    ],
-    [
-      "Brini",
-      "Ettore",
-      11,
-      12,
-      true,
-      10
-    ],
-    [
-      "Andre",
-      "Brini",
-      1,
-      2,
-      true,
-      3
-    ],
-    [
-      "Gorgo",
-      "Brini",
-      7,
-      7,
-      true,
-      6
-    ],
-    [
-      "Frodo",
-      "Andre",
-      6,
-      3,
-      true,
-      2
-    ],
-    [
-      "Brini",
-      "Frodo",
-      3,
-      4,
-      true,
-      3
-    ],
-    [
-      "Gorgo",
-      "Frodo",
-      10,
-      12,
-      true,
-      11
-    ],
-    [
-      "Brini",
-      "Ettore",
-      3,
-      4,
-      true,
-      4
-    ],
-    [
-      "Ettore",
-      "Andre",
-      9,
-      8,
-      true,
-      7
-    ],
-    [
-      "Brini",
-      "Andre",
-      8,
-      7,
-      true,
-      6
-    ],
-    [
-      "Brini",
-      "Ettore",
-      9,
-      9,
-      true,
-      8
-    ]
-  ],
+  "calls": [],
   "double_reveals": [
     [
-      "Andre",
-      3,
-      4,
-      5
-    ]
-  ],
-  "swaps": [
-    [
       "Brini",
-      "Frodo",
-      4,
-      3,
-      4,
-      3
-    ]
-  ],
-  "signals": [
-    [
-      "Brini",
-      99,
-      11
-    ],
-    [
-      "Frodo",
-      99,
-      11
-    ],
-    [
-      "Brini",
-      10,
-      10
-    ],
-    [
-      "Ettore",
-      6,
-      5
-    ],
-    [
-      "Andre",
-      2,
-      2
-    ],
-    [
-      "Gorgo",
-      1,
-      3
-    ],
-    [
-      "Frodo",
-      5,
-      5
-    ],
-    [
-      "Ettore",
-      3.1,
-      2
-    ],
-    [
-      "Brini",
-      7,
-      7
-    ],
-    [
-      "Brini",
-      10,
+      11,
+      8,
       9
     ],
     [
-      "Andre",
-      3,
-      6
-    ],
-    [
       "Brini",
+      11,
       7,
       6
-    ],
-    [
-      "Brini",
-      9,
-      8
-    ],
+    ]
+  ],
+  "swaps": [],
+  "signals": [
     [
       "Frodo",
-      5.1,
-      6
-    ],
-    [
-      "Frodo",
-      5.1,
-      6
+      3,
+      2
     ]
   ],
   "reveals": [
     [
-      "Ettore",
-      3.1,
-      2
-    ],
-    [
-      "Andre",
-      1.1,
-      1
+      "Brini",
+      3,
+      4
     ],
     [
       "Brini",
-      10,
-      9
+      1,
+      1
     ],
     [
       "Frodo",
-      2,
+      3,
       1
-    ],
-    [
-      "Brini",
-      2.1,
-      2
     ]
   ],
-  "not_present": [
-    [
-      "Gorgo",
-      3
-    ],
-    [
-      "Frodo",
-      2
-    ]
-  ]
+  "not_present": []
 }

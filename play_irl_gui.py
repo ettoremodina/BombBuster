@@ -318,10 +318,25 @@ class BombBusterGUI:
                 border_color = "#F5A623"  # Orange border for selected
             
             # Create card frame
+            # Use fixed size to ensure all cards are same size regardless of content
+            frame_width = 100
+            frame_height = 120
+            
+            # If in suggestion mode (playable_values set), we might need more space
+            if playable_values is not None:
+                frame_width = 100
+                frame_height = 120
+                
             card_frame = tk.Frame(cards_frame, relief=tk.RIDGE, borderwidth=border_width,
                                  highlightbackground=border_color, highlightthickness=border_width,
-                                 bg=border_color)
+                                 bg=border_color, width=frame_width, height=frame_height)
+            card_frame.pack_propagate(False)
             card_frame.grid(row=0, column=display_col, padx=2)
+            
+            # Position label below
+            pos_label = tk.Label(card_frame, text=f"Pos {pos+1}", 
+                               font=("Arial", 8), bg="#f0f0f0")
+            pos_label.pack(side=tk.BOTTOM, fill=tk.X)
             
             # Determine content
             if len(pos_beliefs) == 1:
@@ -343,39 +358,61 @@ class BombBusterGUI:
                 
                 value_label = tk.Label(card_frame, text=display_value, width=4, height=3,
                                       bg=bg_color, font=font)
-                value_label.pack()
+                value_label.pack(expand=True, fill=tk.BOTH)
                 
             elif playable_values is not None:
                 # Suggestion mode: Show all values, colored
-                # Use Text widget for coloring
-                text_widget = tk.Text(card_frame, width=6, height=5, font=("Arial", 14), 
-                                     bg=bg_color, relief=tk.FLAT, cursor="arrow")
-                text_widget.pack()
+                # Use a grid of labels for better layout control
                 
-                # Configure tags
-                text_widget.tag_configure("playable", foreground="red", font=("Arial", 14, "bold"))
-                text_widget.tag_configure("normal", foreground="black")
-                text_widget.tag_configure("center", justify='center')
+                # Create a container frame for the grid
+                grid_frame = tk.Frame(card_frame, bg=bg_color)
+                grid_frame.pack(expand=True, fill=tk.BOTH, padx=2, pady=2)
                 
                 sorted_vals = sorted(list(pos_beliefs))
+                num_vals = len(sorted_vals)
+                
+                # Determine grid dimensions
+                # If few values, 1 column. If many, 2 or 3 columns.
+                if num_vals <= 4:
+                    columns = 1
+                elif num_vals <= 8:
+                    columns = 2
+                else:
+                    columns = 3
+                    
                 for i, val in enumerate(sorted_vals):
-                    tag = "playable" if val in playable_values else "normal"
-                    text_widget.insert(tk.END, str(val), (tag, "center"))
-                    if i < len(sorted_vals) - 1:
-                        # Add separator or newline
-                        # If many values, maybe space separated? Or newline?
-                        # Let's try space separated with wrapping if needed, or just newlines if few
-                        if len(sorted_vals) > 6:
-                            text_widget.insert(tk.END, " ", "center")
-                        else:
-                            text_widget.insert(tk.END, "\n", "center")
+                    row = i // columns
+                    col = i % columns
+                    
+                    fg_color = "red" if val in playable_values else "black"
+                    font_weight = "bold" if val in playable_values else "normal"
+                    
+                    # Adjust font size based on count
+                    font_size = 14
+                    if num_vals > 8:
+                        font_size = 10
+                    elif num_vals > 4:
+                        font_size = 12
+                        
+                    lbl = tk.Label(grid_frame, text=str(val), 
+                                  fg=fg_color, bg=bg_color,
+                                  font=("Arial", font_size, font_weight))
+                    
+                    # Center in its cell
+                    lbl.grid(row=row, column=col, sticky="nsew", padx=1, pady=1)
+                    
+                # Configure grid weights to distribute space
+                for c in range(columns):
+                    grid_frame.columnconfigure(c, weight=1)
+                for r in range((num_vals + columns - 1) // columns):
+                    grid_frame.rowconfigure(r, weight=1)
                 
-                text_widget.config(state=tk.DISABLED)
-                
-                # Bind click events to text widget too
+                # Bind click events to the grid frame and all labels
                 if panel and player_key is not None:
                     handler = lambda e, p=pos: self._on_hand_click(panel, player_key, p)
-                    text_widget.bind("<Button-1>", handler)
+                    grid_frame.bind("<Button-1>", handler)
+                    for child in grid_frame.winfo_children():
+                        child.bind("<Button-1>", handler)
 
             elif len(pos_beliefs) < 5:
                 # Uncertain but few possibilities
@@ -383,19 +420,14 @@ class BombBusterGUI:
                 font = ("Arial", 10)
                 value_label = tk.Label(card_frame, text=display_value, width=4, height=3,
                                       bg=bg_color, font=font)
-                value_label.pack()
+                value_label.pack(expand=True, fill=tk.BOTH)
             else:
                 # Many possibilities
                 display_value = f"#{len(pos_beliefs)}"
                 font = ("Arial", 12, "bold")
                 value_label = tk.Label(card_frame, text=display_value, width=4, height=3,
                                       bg=bg_color, font=font)
-                value_label.pack()
-            
-            # Position label below
-            pos_label = tk.Label(card_frame, text=f"Pos {pos+1}", 
-                               font=("Arial", 8), bg="#f0f0f0")
-            pos_label.pack(fill=tk.X)
+                value_label.pack(expand=True, fill=tk.BOTH)
 
             # Bind click events if panel is provided
             if panel and player_key is not None:

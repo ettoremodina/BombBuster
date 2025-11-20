@@ -484,9 +484,9 @@ class BeliefModel:
             if self._apply_distance_filter():
                 changed = True
             
-            # # Apply remaining copies distance constraint filter
-            # if self._apply_remaining_copies_distance_filter():
-            #     changed = True
+            # Apply remaining copies distance constraint filter
+            if self._apply_remaining_copies_distance_filter():
+                changed = True
             
             # # Apply uncertain position-value constraint filter
             if self._apply_uncertain_position_value_filter():
@@ -494,6 +494,10 @@ class BeliefModel:
 
             # Apply subset cardinality filter
             if self._apply_subset_cardinality_filter():
+                changed = True
+            
+            # Apply called value filter
+            if self._apply_called_value_filter():
                 changed = True
             
             # If no changes, we've reached a fixed point
@@ -801,7 +805,111 @@ class BeliefModel:
         
         return changed
     
+    def _apply_remaining_copies_distance_filter(self) -> bool:
+        """
+        Apply filter based on remaining copies and distance constraints.
         
+        For each position and candidate value, check if assigning that value
+        would force neighboring positions to also take that value (due to ordering),
+        and if there are enough copies available to satisfy this chain.
+        
+        Example: ...11-11-y1-y2-y3-y4... with y4=10.
+        If y4=10, then y1,y2,y3 must be <= 10.
+        If y1 is bounded below by 10 (e.g. left neighbor is 10), then y1,y2,y3 must be 10.
+        This requires 4 copies of 10. If only 3 available, y4 cannot be 10.
+        
+        Returns:
+            True if any changes were made
+        """
+        changed = False
+        W = self.config.wires_per_player
+        
+        for player_id in range(self.config.n_players):
+            for pos in range(W):
+                # Check each candidate value
+                candidates = list(self.beliefs[player_id][pos])
+                for value in candidates:
+                    # Calculate required copies if card[pos] = value
+                    required_copies = 1
+                    forced_indices = {pos}
+                    
+                    # Check left neighbors
+                    possible_chain = True
+                    for left_pos in range(pos - 1, -1, -1):
+                        left_belief = self.beliefs[player_id][left_pos]
+                        if not left_belief:
+                            break
+                        
+                        min_left = min(left_belief)
+                        if min_left > value:
+                            # Ordering violation (should be caught by ordering filter)
+                            possible_chain = False
+                            break
+                        elif min_left == value:
+                            # Must be at least value. Since right neighbor is value, must be value.
+                            required_copies += 1
+                            forced_indices.add(left_pos)
+                        else:
+                            # min_left < value, so left_pos could be smaller. Chain breaks.
+                            break
+                    
+                    if not possible_chain:
+                        self.beliefs[player_id][pos].discard(value)
+                        changed = True
+                        continue
+
+                    # Check right neighbors
+                    for right_pos in range(pos + 1, W):
+                        right_belief = self.beliefs[player_id][right_pos]
+                        if not right_belief:
+                            break
+                            
+                        max_right = max(right_belief)
+                        if max_right < value:
+                            # Ordering violation
+                            possible_chain = False
+                            break
+                        elif max_right == value:
+                            # Must be at most value. Since left neighbor is value, must be value.
+                            required_copies += 1
+                            forced_indices.add(right_pos)
+                        else:
+                            # max_right > value, so right_pos could be larger. Chain breaks.
+                            break
+                    
+                    if not possible_chain:
+                        self.beliefs[player_id][pos].discard(value)
+                        changed = True
+                        continue
+                    
+                    # Calculate available copies
+                    tracker = self.value_trackers[value]
+                    
+                    # Start with uncertain copies (free in deck/unknown hands)
+                    available_copies = tracker.get_uncertain_count()
+                    
+                    # Add back copies already assigned to this player at forced positions
+                    # (because we are using them in our chain)
+                    for pid, p_pos in tracker.revealed:
+                        if pid == player_id and p_pos in forced_indices:
+                            available_copies += 1
+                            
+                    for pid, p_pos in tracker.certain:
+                        # Note: certain might overlap with revealed? 
+                        # ValueTracker implementation says revealed removes from certain.
+                        # So they are disjoint.
+                        if pid == player_id and p_pos in forced_indices:
+                            available_copies += 1
+                            
+                    # Add back copies known to be held by this player (called)
+                    # (because our chain can use these "floating" copies)
+                    available_copies += tracker.called.count(player_id)
+                    
+                    if required_copies > available_copies:
+                        self.beliefs[player_id][pos].discard(value)
+                        changed = True
+                        
+        return changed
     
     def is_consistent(self) -> bool:
         """
@@ -1070,3 +1178,78 @@ class BeliefModel:
         }
         
         return cls.from_dict(combined_data, observation, config, player_names)
+    
+    def _apply_called_value_filter(self) -> bool:
+        """
+        Apply constraints based on values the player has 'called'.
+        
+        If a player has called a value (announced they have it), that value MUST 
+        exist in one of their unrevealed/uncertain positions.
+        
+        This filter applies two types of deductions:
+        1. "Full Hand": If the number of UNIQUE called values equals the number of uncertain positions,
+           then those positions can ONLY contain the called values.
+        2. "Forced Position": If a called value can only fit in a specific number of 
+           positions equal to the number of copies called (which is 1 per unique value), 
+           it MUST be in those positions.
+        
+        Returns:
+            True if any changes were made
+        """
+        changed = False
+        
+        for player_id in range(self.config.n_players):
+            # 1. Identify uncertain positions (U_P)
+            uncertain_positions = self.get_uncertain_positions(player_id)
+            if not uncertain_positions:
+                continue
+                
+            # 2. Identify called values (C_P)
+            # These are values the player has called but are not yet located (certain/revealed)
+            # NOTE: Even if a player calls a value multiple times, we only know they have AT LEAST one copy.
+            # We cannot assume they have multiple copies based on multiple calls.
+            called_values = []
+            for value, tracker in self.value_trackers.items():
+                # Check if player has called this value
+                # We treat it as exactly 1 required copy (at least one)
+                if player_id in tracker.called:
+                    called_values.append(value)
+            
+            if not called_values:
+                continue
+                
+            # Check 1: Full Hand / Capacity Constraint
+            # If number of called values equals number of uncertain slots,
+            # those slots can ONLY hold the called values.
+            # Example: 2 uncertain slots, called "10" and "11". Must be {10, 11}.
+            if len(called_values) == len(uncertain_positions):
+                allowed_values = set(called_values)
+                for pos in uncertain_positions:
+                    before_size = len(self.beliefs[player_id][pos])
+                    # Intersect current beliefs with allowed values
+                    self.beliefs[player_id][pos] &= allowed_values
+                    
+                    if len(self.beliefs[player_id][pos]) < before_size:
+                        changed = True
+            
+            # Check 2: Forced Positions
+            # For each unique called value, check if it is forced into specific slots
+            # Since we only assume 1 copy per called value, we look for values that fit in exactly 1 slot
+            for val in called_values:
+                required_count = 1 # We only enforce 1 copy
+                
+                # Find which uncertain positions CAN hold this value
+                possible_slots = [
+                    pos for pos in uncertain_positions 
+                    if val in self.beliefs[player_id][pos]
+                ]
+                
+                # If the number of possible slots equals the required count (1),
+                # then that slot MUST hold this value.
+                if len(possible_slots) == required_count:
+                    pos = possible_slots[0]
+                    if len(self.beliefs[player_id][pos]) > 1:
+                        self.beliefs[player_id][pos] = {val}
+                        changed = True
+                            
+        return changed
