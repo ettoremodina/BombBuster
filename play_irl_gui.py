@@ -56,6 +56,7 @@ class BombBusterGUI:
         self.signals = []
         self.reveals = []
         self.not_present = []
+        self.has_values = []
         
         # Game objects
         self.game = None
@@ -77,6 +78,7 @@ class BombBusterGUI:
                 self.signals = old_history.get("signals", [])
                 self.reveals = old_history.get("reveals", [])
                 self.not_present = old_history.get("not_present", [])
+                self.has_values = old_history.get("has_values", [])
         
         # Initialize game
         self.initialize_game()
@@ -98,6 +100,7 @@ class BombBusterGUI:
             signals=self.signals,
             reveals=self.reveals,
             not_present=self.not_present,
+            has_values=self.has_values,
             save_to_json=self.auto_save,
             load_from_json=self.load_existing
         )
@@ -493,17 +496,7 @@ class BombBusterGUI:
             elif action_type == "not_present":
                 self.not_present.append(action_data)
             elif action_type == "has_value":
-                # Process has_value action directly through game
-                player_name, value = action_data
-                # Find player ID from name
-                player_id = None
-                for pid, name in self.player_names.items():
-                    if name == player_name:
-                        player_id = pid
-                        break
-                
-                if player_id is not None:
-                    self.game.announce_has_value(player_id, value)
+                self.has_values.append(action_data)
             
             # Refresh game
             self.save_and_refresh()

@@ -1,43 +1,26 @@
 {
   "calls": [],
-  "double_reveals": [
-    [
-      "Brini",
-      11,
-      8,
-      9
-    ],
-    [
-      "Brini",
-      11,
-      7,
-      6
-    ]
-  ],
+  "double_reveals": [],
   "swaps": [],
   "signals": [
     [
-      "Frodo",
+      "Brini",
       3,
-      2
+      3
     ]
   ],
   "reveals": [
     [
       "Brini",
-      3,
-      4
-    ],
-    [
-      "Brini",
       1,
-      1
-    ],
-    [
-      "Frodo",
-      3,
       1
     ]
   ],
-  "not_present": []
+  "not_present": [],
+  "has_values": [
+    [
+      "Brini",
+      2
+    ]
+  ]
 }

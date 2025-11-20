@@ -16,7 +16,7 @@
             "name": "IRL",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/play_irl.py",
+            "program": "${workspaceFolder}/play_irl_gui.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}"
         }
