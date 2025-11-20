@@ -1,11 +1,20 @@
 {
-  "calls": [],
+  "calls": [
+    [
+      "Ettore",
+      "Brini",
+      2,
+      1,
+      true,
+      1
+    ]
+  ],
   "double_reveals": [],
   "swaps": [],
   "signals": [
     [
       "Brini",
-      7,
+      8,
       7
     ]
   ],
@@ -14,18 +23,13 @@
       "Brini",
       1,
       1
-    ],
-    [
-      "Brini",
-      4,
-      4
     ]
   ],
-  "not_present": [],
-  "has_values": [
+  "not_present": [
     [
-      "Brini",
-      1
+      "Andre",
+      7
     ]
-  ]
+  ],
+  "has_values": []
 }

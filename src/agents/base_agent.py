@@ -52,7 +52,7 @@ class BaseAgent(ABC):
         Returns:
             Player ID
         """
-        pass
+        return self.player.player_id
     
     def __repr__(self):
         return f"{self.name}(Player {self.player.player_id})"

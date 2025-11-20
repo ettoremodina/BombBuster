@@ -1,19 +1,15 @@
 # TO DO
 
 ## improve speed
-- if the belief model did not change after a call, do not apply the filters
-- add a buttom to run filtering
+
+## automatic playing
+- check if the game can play automatically and do some simulations
 
 ## CHECK ALL FILTERS INDIVIDUALLY
 - _apply_subset_cardinality_filter (difficult to test)
 - _apply_remaining_copies_distance_filter (seems working)
 - _apply_called_values_filter (not sure the logic is correct)
 
-## FIND A MORE GENERAL FILTERING STRATEGY
-- is there a way to condense all filters in a more general way?
-- it would be nice to have a more general, even simulation based filtering strategy
-- right now they are all hard coded, covering a set of particular cases, with no generalization 
-it is difficult to be sure that all cases are covered
 
 ## TEST SWAPPING
 - it works, but I don't know if the belief system and value tracker is correctly updated in all cases

@@ -40,7 +40,25 @@ class RandomAgent(BaseAgent):
         Returns:
             Tuple of (target_id, position, value) or None if no valid calls
         """
-        pass
+        targets = self._get_valid_targets(game)
+        if not targets:
+            return None
+            
+        target_id = random.choice(targets)
+        
+        positions = self._get_valid_positions(game)
+        if not positions:
+            return None
+            
+        position = random.choice(positions)
+        
+        values = self._get_available_values()
+        if not values:
+            return None
+            
+        value = random.choice(values)
+        
+        return (target_id, position, value)
     
     def _get_valid_targets(self, game: Game) -> List[int]:
         """
@@ -52,7 +70,7 @@ class RandomAgent(BaseAgent):
         Returns:
             List of player IDs
         """
-        pass
+        return [p.player_id for p in game.players if p.player_id != self.player.player_id]
     
     def _get_valid_positions(self, game: Game) -> List[int]:
         """
@@ -64,7 +82,7 @@ class RandomAgent(BaseAgent):
         Returns:
             List of position indices
         """
-        pass
+        return list(range(game.config.wires_per_player))
     
     def _get_available_values(self) -> List[int]:
         """
@@ -73,4 +91,6 @@ class RandomAgent(BaseAgent):
         Returns:
             List of wire values
         """
-        pass
+        if self.player.wire is None:
+            return []
+        return list(set(self.player.wire))

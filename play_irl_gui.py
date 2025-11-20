@@ -1038,8 +1038,7 @@ class SignalActionPanel(ActionPanel):
     def clear(self):
         """Clear all selections."""
         self.clear_selections()
-        self.selected_values.clear()
-        self.update_value_buttons_state()
+        self.action_type_var.set("signal")
 
 
 class NotPresentActionPanel(ActionPanel):

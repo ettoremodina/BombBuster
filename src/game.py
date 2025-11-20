@@ -247,6 +247,44 @@ class Game:
         
         return reveal_record
     
+    def auto_make_call(self, caller_id: int, target_id: int, position: int, value: Union[int, float]) -> CallRecord:
+        """
+        Process a call where success is determined automatically from game state.
+        Only for use in simulation mode where all wires are known.
+        
+        Args:
+            caller_id: ID of the player making the call
+            target_id: ID of the player being called
+            position: Wire position being called
+            value: The value being called
+            
+        Returns:
+            CallRecord with the result
+        """
+        if self.config.playing_irl:
+            raise ValueError("auto_make_call cannot be used in IRL mode")
+            
+        target_player = self.players[target_id]
+        caller_player = self.players[caller_id]
+        
+        # Determine success
+        actual_value = target_player.wire[position]
+        success = (actual_value == value)
+        
+        # Determine caller_position if successful
+        caller_position = None
+        if success:
+            # Find where caller has this value
+            # Simple strategy: find first index of value in caller's wire
+            try:
+                indices = [i for i, v in enumerate(caller_player.wire) if v == value]
+                if indices:
+                    caller_position = indices[0]
+            except ValueError:
+                pass 
+                
+        return self.make_call(caller_id, target_id, position, value, success, caller_position)
+    
     def _validate_signal(self, player_id: int, value: Union[int, float], position: int):
         """
         Validate that a signal is legal according to game rules.
