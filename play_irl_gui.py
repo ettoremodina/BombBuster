@@ -23,7 +23,8 @@ from gui_config import (
     PLAYER_NAMES,
     BELIEF_FOLDER,
     AUTO_SAVE,
-    LOAD_EXISTING
+    LOAD_EXISTING,
+    USE_GLOBAL_BELIEF
 )
 
 
@@ -41,6 +42,7 @@ class BombBusterGUI:
         self.belief_folder = BELIEF_FOLDER
         self.auto_save = AUTO_SAVE
         self.load_existing = LOAD_EXISTING
+        self.use_global_belief = USE_GLOBAL_BELIEF
         
         # Find my player ID
         self.my_player_id = 0
@@ -66,7 +68,7 @@ class BombBusterGUI:
         self.current_action_type = "call"
         
         # Create config
-        self.config = GameConfig(playing_irl=True)
+        self.config = GameConfig(playing_irl=True, use_global_belief=self.use_global_belief)
         
         # Load existing actions if available
         if self.load_existing:

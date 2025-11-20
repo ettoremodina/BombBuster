@@ -58,6 +58,7 @@ class Game:
         This is called once at game start.
         """
         from src.belief.belief_model import BeliefModel
+        from src.belief.global_belief_model import GlobalBeliefModel
         
         for player in self.players:
             # In IRL mode, only initialize belief system for player 0 (us)
@@ -69,7 +70,10 @@ class Game:
             observation = self.get_observation_for_player(player.player_id)
             
             # Create and link belief system
-            player.belief_system = BeliefModel(observation, self.config)
+            if self.config.use_global_belief:
+                player.belief_system = GlobalBeliefModel(observation, self.config)
+            else:
+                player.belief_system = BeliefModel(observation, self.config)
     
     def make_call(self, caller_id: int, target_id: int, position: int, value: Union[int, float], 
                   success: bool, caller_position: Optional[int] = None) -> CallRecord:

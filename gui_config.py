@@ -22,3 +22,4 @@ BELIEF_FOLDER = "real_game_beliefs"
 # Options
 AUTO_SAVE = True       # Automatically save after each action
 LOAD_EXISTING = True   # Load existing beliefs on startup
+USE_GLOBAL_BELIEF = True # Use the new global belief model (True) or the old one (False)

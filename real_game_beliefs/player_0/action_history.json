@@ -2,7 +2,13 @@
   "calls": [],
   "double_reveals": [],
   "swaps": [],
-  "signals": [],
+  "signals": [
+    [
+      "Brini",
+      7,
+      7
+    ]
+  ],
   "reveals": [
     [
       "Brini",

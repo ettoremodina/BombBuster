@@ -110,9 +110,14 @@
   },
   "7": {
     "revealed": [],
-    "certain": [],
+    "certain": [
+      [
+        "Brini",
+        6
+      ]
+    ],
     "called": [],
-    "uncertain": "4/4"
+    "uncertain": "3/4"
   },
   "8": {
     "revealed": [],
