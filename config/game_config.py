@@ -8,12 +8,16 @@ Defines the wire distribution, number of players, and game constraints.
 # Format: {value: number_of_copies}
 WIRE_DISTRIBUTION = {
     **{i: 4 for i in range(1, 13)},  # Values 1-12 have 4 copies each
-    3.5: 1,                           # Value 2.5 has 2 copies
-    6.5: 1,                            # Value 4.5 has 2 copies
-    13:2
+    6.5: 1,                           # Value 2.5 has 2 copies
+    1.1:1,
+    3.1:1,
+    5.1:1,
+    2.1:1,
+    99:2,
+
 }
 
-N = 4  # Number of players (collaborative team)
+N = 5  # Number of players (collaborative team)
 
 # Derived parameters
 WIRE_VALUES = sorted(WIRE_DISTRIBUTION.keys())  # All unique values

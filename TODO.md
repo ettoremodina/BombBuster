@@ -9,7 +9,19 @@
 - it is no longer markovian when using swapping, because the history of swaps matters
 
 ## last filter for impossible values
-- anchors and stuff
+- I need to implement the last filter function for this game
+The idea is to limit the possible values due to two factors: remaining copies and distance
+Let's say a player has ...11-11-11-11-y1-y2-y3-y4... this situation and another players has a 10
+This mean that y1,y2,y3 can have a 10, but y4 cannot, since only 3 copies of 10 are left y4 cannot have 10.
+Why? Because if I had for example 10 in y4,y3 and y2, no value would be possible for y1. Hence y4 cannot be a 10.
+Another example: ...3-y1-y2-1... and another player has two 3, then y2 cannot be a 3, since y1 would have no possible value.
+Notes: values are ordered and you must keep in mind when implementing this function to be careful to not remove values when in the set there is only 1. This should never happen if you implement it correctly but previous attempts failed in this way.
+
+## called values filtering
+Nota: quando uno chiama ho un informazione più forte che solo sapere che potrebbe avere quel valore, in che modo è imponibile? Secondo me solo simulazione 
+- special case: if for example one position is left for a player, and the player called only one of the two possible values, then I can remove the other value from that position
+
+Touch, aggiornamento manuale o ogni tot
 
 # DONE
 

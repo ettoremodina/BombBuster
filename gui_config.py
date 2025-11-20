@@ -5,14 +5,15 @@ Edit this file to configure your game settings
 
 # Your player configuration
 MY_PLAYER_NAME = "Ettore"
-MY_WIRE = [1, 2, 3, 3, 5, 7, 7, 8, 8, 9, 9, 10, 11]
+MY_WIRE = [1,3.1,4,6,6,6.5,8,9,9,10,12]
 
 # Player names (in order by player ID)
 PLAYER_NAMES = [
     "Ettore",
     "Brini",
     "Frodo",
-    "Gorgo"
+    "Gorgo",
+    "Andre"
 ]
 
 # Belief folder for saving/loading game state

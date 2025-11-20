@@ -166,80 +166,83 @@ class GameStatistics:
             'player_entropies': player_entropies
         }
     
-    def get_certain_values(self) -> Set[Union[int, float]]:
+    def get_playable_values(self) -> Set[Union[int, float]]:
         """
-        Get the set of values this player is certain they have.
+        Get values that the player has and are NOT revealed.
         
         Returns:
-            Set of certain values
+            Set of playable values
         """
+        playable_values = set()
+        value_trackers = self.belief_model.value_trackers
+        
         if self.my_wire is not None:
-            return set(self.my_wire)
+            # If we know the wire, check each position
+            for pos, val in enumerate(self.my_wire):
+                is_revealed = False
+                if val in value_trackers:
+                    for pid, r_pos in value_trackers[val].revealed:
+                        if pid == self.my_player_id and r_pos == pos:
+                            is_revealed = True
+                            break
+                if not is_revealed:
+                    playable_values.add(val)
+        else:
+            # Fallback to beliefs (only certain values)
+            for pos in range(self.config.wires_per_player):
+                beliefs = self.belief_model.beliefs[self.my_player_id][pos]
+                if len(beliefs) == 1:
+                    val = list(beliefs)[0]
+                    is_revealed = False
+                    if val in value_trackers:
+                        for pid, r_pos in value_trackers[val].revealed:
+                            if pid == self.my_player_id and r_pos == pos:
+                                is_revealed = True
+                                break
+                    if not is_revealed:
+                        playable_values.add(val)
         
-        certain_values = set()
-        for position in range(self.config.wires_per_player):
-            possible_values = self.belief_model.beliefs[self.my_player_id][position]
-            if len(possible_values) == 1:
-                certain_values.add(list(possible_values)[0])
-        
-        return certain_values
-    
-    def suggest_call(self) -> Optional[Tuple[int, int, Union[int, float]]]:
+        return playable_values
+
+    def is_position_revealed(self, player_id: int, position: int) -> bool:
         """
-        Suggest the best call to make based on current beliefs.
+        Check if a specific position for a player is already revealed.
         
-        Strategy:
-        1. Filter for values that this player has
-        2. Find certain calls (belief set size = 1)
-        3. If no certain calls, return the call with minimum uncertainty
-        
-        Returns:
-            Tuple of (target_id, position, value) or None if no call available
-        """
-        my_values = self.get_certain_values()
-        if not my_values:
-            return None
-        
-        certain_calls = []
-        uncertain_calls = []
-        
-        for target_id in range(self.config.n_players):
-            if target_id == self.my_player_id:
-                continue
+        Args:
+            player_id: The player ID
+            position: The position index
             
-            for position in range(self.config.wires_per_player):
-                possible_values = self.belief_model.beliefs[target_id][position]
-                
-                for value in possible_values:
-                    if value not in my_values:
-                        continue
-                    
-                    if len(possible_values) == 1:
-                        certain_calls.append((target_id, position, value, 1))
-                    else:
-                        uncertain_calls.append((target_id, position, value, len(possible_values)))
+        Returns:
+            True if revealed, False otherwise
+        """
+        # We need to check all value trackers to see if this position is revealed
+        # This is a bit inefficient but safe. 
+        # Alternatively, we could check if the belief is certain and then check that value's tracker.
         
-        if certain_calls:
-            target_id, position, value, _ = certain_calls[0]
-            return (target_id, position, value)
+        # Optimization: Check if belief is certain first
+        beliefs = self.belief_model.beliefs[player_id][position]
+        if len(beliefs) == 1:
+            val = list(beliefs)[0]
+            if val in self.belief_model.value_trackers:
+                for pid, r_pos in self.belief_model.value_trackers[val].revealed:
+                    if pid == player_id and r_pos == position:
+                        return True
         
-        if uncertain_calls:
-            uncertain_calls.sort(key=lambda x: x[3])
-            target_id, position, value, _ = uncertain_calls[0]
-            return (target_id, position, value)
-        
-        return None
-    
+        # If belief is not certain, it can't be revealed (revealed implies certain)
+        # Unless there's some inconsistency, but let's assume consistency.
+        return False
+
     def get_all_call_suggestions(self) -> Dict[str, List[Tuple[int, int, Union[int, float], int]]]:
         """
         Get all possible call suggestions organized by certainty level.
+        Filters out revealed values and revealed target positions.
         
         Returns:
             Dict with keys:
             - 'certain': List of (target_id, position, value, 1)
             - 'uncertain': List of (target_id, position, value, uncertainty) sorted by uncertainty
         """
-        my_values = self.get_certain_values()
+        my_values = self.get_playable_values()
         if not my_values:
             return {'certain': [], 'uncertain': []}
         
@@ -251,6 +254,10 @@ class GameStatistics:
                 continue
             
             for position in range(self.config.wires_per_player):
+                # Skip if target position is already revealed
+                if self.is_position_revealed(target_id, position):
+                    continue
+                
                 possible_values = self.belief_model.beliefs[target_id][position]
                 
                 for value in possible_values:

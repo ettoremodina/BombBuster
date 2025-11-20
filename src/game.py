@@ -337,6 +337,69 @@ class Game:
         
         return not_present_record
     
+    def announce_has_value(self, player_id: int, value: Union[int, float]):
+        """
+        Process an announcement where a player declares they have a specific value.
+        This adds the player to the 'called' list for that value (position unknown).
+        
+        Args:
+            player_id: ID of the player making the announcement
+            value: The value they have (can be int or float)
+        
+        Raises:
+            ValueError: If the announcement is invalid
+        """
+        # Validate the announcement
+        self._validate_has_value(player_id, value)
+        
+        # Broadcast to all players to update their value trackers
+        self._broadcast_has_value(player_id, value)
+        
+        # Increment turn
+        self.current_turn += 1
+    
+    def _validate_has_value(self, player_id: int, value: Union[int, float]):
+        """
+        Validate that a has-value announcement is legal according to game rules.
+        
+        Args:
+            player_id: ID of the player making the announcement
+            value: The value being announced
+        
+        Raises:
+            ValueError: If the announcement violates game rules
+        """
+        # Check if game is over
+        if self.game_over:
+            raise ValueError("Game is already over")
+        
+        # Check if player ID is valid
+        if player_id < 0 or player_id >= len(self.players):
+            raise ValueError(f"Invalid player_id: {player_id}")
+        
+        # Check if value is valid
+        if value not in self.config.wire_values:
+            raise ValueError(f"Invalid value: {value}. Must be in {self.config.wire_values}")
+        
+        # When not in IRL mode, validate that the player actually has this value
+        if not self.config.playing_irl:
+            player = self.players[player_id]
+            if value not in player.wire:
+                raise ValueError(f"Player {player_id} cannot announce having value {value} - they don't possess it")
+    
+    def _broadcast_has_value(self, player_id: int, value: Union[int, float]):
+        """
+        Broadcast a has-value announcement to all players so they can update their value trackers.
+        
+        Args:
+            player_id: The player who has the value
+            value: The value they have
+        """
+        # Each player's belief system processes the has-value announcement
+        for player in self.players:
+            if player.belief_system is not None:
+                player.belief_system.process_has_value(player_id, value)
+    
     def _validate_not_present(self, player_id: int, value: Union[int, float]):
         """
         Validate that a not-present announcement is legal according to game rules.

@@ -4,7 +4,7 @@ Each player maintains candidate sets representing possible values
 for every wire position across all players from their perspective.
 """
 
-from typing import Dict, Set, List, Optional, Union
+from typing import Dict, Set, List, Optional, Union, Tuple
 from itertools import combinations
 from src.data_structures import CallRecord, DoubleRevealRecord, SwapRecord, SignalRecord, NotPresentRecord, GameObservation, ValueTracker
 from config.game_config import GameConfig
@@ -177,7 +177,24 @@ class BeliefModel:
         # Remove this value from all positions for this player
         for position in range(len(self.beliefs[player_id])):
             if value in self.beliefs[player_id][position]:
-                self.beliefs[player_id][position].discard(value)
+                if len(self.beliefs[player_id][position]) > 1:
+                    self.beliefs[player_id][position].discard(value)
+        
+        # Apply filters to deduce new information
+        self.apply_filters()
+    
+    def process_has_value(self, player_id: int, value: Union[int, float]):
+        """
+        Update beliefs based on a player announcing they have a specific value.
+        Add the player to the 'called' list for that value (position unknown).
+        
+        Args:
+            player_id: The player who has the value
+            value: The value they have
+        """
+        # Only update if this is not my own announcement (I already know my wire)
+        if player_id != self.my_player_id:
+            self.value_trackers[value].add_called(player_id)
         
         # Apply filters to deduce new information
         self.apply_filters()
@@ -466,6 +483,10 @@ class BeliefModel:
             # Apply distance constraint filter (r_k based)
             if self._apply_distance_filter():
                 changed = True
+            
+            # # Apply remaining copies distance constraint filter
+            # if self._apply_remaining_copies_distance_filter():
+            #     changed = True
             
             # # Apply uncertain position-value constraint filter
             if self._apply_uncertain_position_value_filter():
@@ -780,53 +801,6 @@ class BeliefModel:
         
         return changed
     
-    # def _apply_position_value_filter(self) -> bool:
-    #     # STEP 2: Position constraints - high values with few uncertain copies cannot appear too early
-    #     # Build threshold: position before which this value cannot appear
-    #     for player_id in range(self.config.n_players):
-    #         threshold = W
-    #         for value in sorted(self.config.wire_values, reverse=True):
-    #             uncertain_copies = player_adjustments[player_id][value]
-                
-    #             # Skip zero-copy case (already handled by existence filter)
-    #             if uncertain_copies == 0:
-    #                 continue
-                
-    #             threshold -= uncertain_copies
-                
-    #             # Clamp threshold to valid range [0, W)
-    #             if threshold > 0 and threshold < W:
-    #                 # Eliminate this value from positions [0, threshold)
-    #                 for pos in range(0, min(threshold, W)):
-    #                     if pos < len(self.beliefs[player_id]):  # Safety check
-    #                         before_size = len(self.beliefs[player_id][pos])
-    #                         self.beliefs[player_id][pos].discard(value)
-    #                         if len(self.beliefs[player_id][pos]) < before_size:
-    #                             changed = True
-        
-    #     # STEP 3: Position constraints - low values with few uncertain copies cannot appear too late
-    #     # Build threshold: position after which this value cannot appear
-    #     for player_id in range(self.config.n_players):
-    #         threshold = 0
-    #         for value in sorted(self.config.wire_values):
-    #             uncertain_copies = player_adjustments[player_id][value]
-                
-    #             # Skip zero-copy case (already handled by existence filter)
-    #             if uncertain_copies == 0:
-    #                 continue
-                
-    #             threshold += uncertain_copies
-                
-    #             # Clamp threshold to valid range (0, W]
-    #             if threshold > 0 and threshold < W:
-    #                 # Eliminate this value from positions [threshold, W)
-    #                 for pos in range(max(0, threshold), W):
-    #                     if pos < len(self.beliefs[player_id]):  # Safety check
-    #                         before_size = len(self.beliefs[player_id][pos])
-    #                         self.beliefs[player_id][pos].discard(value)
-    #                         if len(self.beliefs[player_id][pos]) < before_size:
-    #                             changed = True
-    #     return changed
         
     
     def is_consistent(self) -> bool:
