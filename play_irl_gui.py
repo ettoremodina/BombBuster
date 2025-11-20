@@ -195,7 +195,6 @@ class BombBusterGUI:
             ("SIGNAL", "signal"),
             ("NOT PRESENT", "not_present"),
             ("HAS VALUE", "has_value"),
-            ("VIEW BELIEFS", "beliefs"),
             ("SUGGESTIONS", "suggestions")
         ]
         
@@ -215,7 +214,6 @@ class BombBusterGUI:
         self.signal_panel = SignalActionPanel(self.action_container, self)
         self.not_present_panel = NotPresentActionPanel(self.action_container, self)
         self.has_value_panel = HasValueActionPanel(self.action_container, self)
-        self.beliefs_panel = BeliefViewPanel(self.action_container, self)
         self.suggester_panel = SuggesterPanel(self.action_container, self)
         
         self.panels = {
@@ -225,7 +223,6 @@ class BombBusterGUI:
             "signal": self.signal_panel,
             "not_present": self.not_present_panel,
             "has_value": self.has_value_panel,
-            "beliefs": self.beliefs_panel,
             "suggestions": self.suggester_panel
         }
     
@@ -767,28 +764,38 @@ class SwapActionPanel(ActionPanel):
         
         tk.Label(self, text="SWAP ACTION", font=("Arial", 14, "bold"), fg="#333333").pack(pady=10)
         
+        # --- Player 1 Section ---
         self.create_player_buttons(self, "Player 1:", "player1")
         
-        # Hand viewer for player 1 (visual reference only)
+        # Hand viewer for player 1
         self.player1_hand_frame = tk.Frame(self)
         self.player1_hand_frame.pack(fill=tk.X, pady=5, padx=10)
         
-        # Position selection buttons
+        # Position selection variables
         self.init_position_var("init_pos1")
+        self.init_position_var("final_pos1")
         
+        # --- Player 2 Section ---
         self.create_player_buttons(self, "Player 2:", "player2")
         
-        # Hand viewer for player 2 (visual reference only)
+        # Hand viewer for player 2
         self.player2_hand_frame = tk.Frame(self)
         self.player2_hand_frame.pack(fill=tk.X, pady=5, padx=10)
         
-        # Position selection buttons
+        # Position selection variables
         self.init_position_var("init_pos2")
+        self.init_position_var("final_pos2")
         
-        tk.Label(self, text="─── After removing wires ───", font=("Arial", 10, "italic", "bold"), fg="#666666").pack(pady=10)
+        # Mode selector for position selection
+        mode_frame = tk.Frame(self, bg="#E8F5E9", padx=10, pady=5, relief=tk.GROOVE, borderwidth=1)
+        mode_frame.pack(fill=tk.X, pady=5, padx=5)
+        tk.Label(mode_frame, text="Selecting:", width=10, anchor=tk.W, bg="#E8F5E9", font=("Arial", 10, "bold")).pack(side=tk.LEFT)
         
-        self.create_position_buttons(self, "Final Position (P1):", "final_pos1")
-        self.create_position_buttons(self, "Final Position (P2):", "final_pos2")
+        self.selection_mode = tk.StringVar(value="initial")
+        tk.Radiobutton(mode_frame, text="INITIAL Positions (to remove)", variable=self.selection_mode, 
+                      value="initial", bg="#E8F5E9", font=("Arial", 10), command=self.update_highlights).pack(side=tk.LEFT, padx=10)
+        tk.Radiobutton(mode_frame, text="FINAL Positions (to insert)", variable=self.selection_mode, 
+                      value="final", bg="#E8F5E9", font=("Arial", 10), command=self.update_highlights).pack(side=tk.LEFT, padx=10)
         
         # Received value (only needed if I'm one of the players)
         self.received_value_frame = tk.Frame(self, bg="#FFF8DC", padx=10, pady=10, relief=tk.GROOVE, borderwidth=1)
@@ -808,11 +815,27 @@ class SwapActionPanel(ActionPanel):
         tk.Button(button_frame, text="CLEAR", command=self.clear,
                  bg="#F44336", fg="white", padx=20, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
     
+    def get_position_key_for_player(self, player_key):
+        """Override to return correct key based on selection mode."""
+        mode = self.selection_mode.get()
+        if player_key == 'player1':
+            return 'init_pos1' if mode == 'initial' else 'final_pos1'
+        elif player_key == 'player2':
+            return 'init_pos2' if mode == 'initial' else 'final_pos2'
+        return None
+
+    def update_highlights(self):
+        """Redraw hands to update highlights based on current mode."""
+        if "player1" in self.selections:
+            self.select_player("player1", self.selections["player1"])
+        if "player2" in self.selections:
+            self.select_player("player2", self.selections["player2"])
+
     def add_swap(self):
         """Add the swap action."""
         required = ["player1", "player2", "init_pos1", "init_pos2", "final_pos1", "final_pos2"]
         if not all(k in self.selections for k in required):
-            messagebox.showwarning("Incomplete", "Please complete all fields")
+            messagebox.showwarning("Incomplete", "Please complete all fields (Initial and Final positions for both players)")
             return
         
         p1_id = self.selections["player1"]
@@ -853,6 +876,8 @@ class SwapActionPanel(ActionPanel):
     def clear(self):
         """Clear all selections."""
         self.clear_selections()
+        self.selection_mode.set("initial")
+        self.update_highlights()
 
 
 class DoubleRevealActionPanel(ActionPanel):
@@ -1220,78 +1245,6 @@ class HasValueActionPanel(ActionPanel):
         self.clear_selections()
 
 
-class BeliefViewPanel(tk.Frame):
-    """Panel for viewing all player beliefs."""
-    
-    def __init__(self, parent, app):
-        super().__init__(parent)
-        self.app = app
-        
-        # Header
-        header_frame = tk.Frame(self, bg="#FAFAFA", relief=tk.RIDGE, borderwidth=2)
-        header_frame.pack(fill=tk.X, padx=5, pady=5)
-        tk.Label(header_frame, text="BELIEF SYSTEM VIEW", font=("Arial", 14, "bold"), 
-                fg="#333333", bg="#FAFAFA").pack(pady=10)
-        
-        # Container for player hands (no internal scrollbar)
-        self.player_container = tk.Frame(self, bg="white")
-        self.player_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # Create frames for each player
-        self.player_frames = {}
-        self.setup_player_views()
-    
-    def _on_canvas_configure(self, event):
-        """Handle canvas resize to adjust inner frame width."""
-        # Not needed anymore since we removed the internal canvas
-        pass
-        
-    def setup_player_views(self):
-        """Create view frames for all other players."""
-        # Clear existing
-        for widget in self.player_container.winfo_children():
-            widget.destroy()
-        self.player_frames = {}
-            
-        for pid, name in self.app.player_names.items():
-            if pid == self.app.my_player_id:
-                continue
-                
-            frame = tk.Frame(self.player_container, relief=tk.GROOVE, borderwidth=2, 
-                           padx=15, pady=15, bg="#FAFAFA")
-            frame.pack(fill=tk.X, pady=10, padx=20)
-            
-            self.player_frames[pid] = frame
-            
-            # Initial draw
-            self.app.draw_player_hand(frame, pid, panel=self, player_key=pid)
-            
-    def refresh(self):
-        """Refresh all player views."""
-        # Re-setup if players changed (unlikely but safe) or just redraw
-        if not self.player_frames:
-            self.setup_player_views()
-        else:
-            for pid, frame in self.player_frames.items():
-                self.app.draw_player_hand(frame, pid, panel=self, player_key=pid)
-
-    def handle_hand_click(self, player_key, position):
-        """Show detailed beliefs for the clicked card."""
-        player_id = player_key
-        if not self.app.my_player or not self.app.my_player.belief_system:
-            return
-            
-        beliefs = self.app.my_player.belief_system.beliefs[player_id][position]
-        player_name = self.app.player_names.get(player_id, f"Player {player_id}")
-        
-        # Sort beliefs for display
-        sorted_beliefs = sorted(list(beliefs))
-        
-        msg = ", ".join(str(b) for b in sorted_beliefs)
-            
-        messagebox.showinfo(f"{player_name} - Pos {position+1} ({len(sorted_beliefs)} possibilities)", msg)
-
-
 class SuggesterPanel(tk.Frame):
     """Panel for viewing call suggestions."""
     
@@ -1323,7 +1276,10 @@ class SuggesterPanel(tk.Frame):
             return
             
         # Initialize statistics
-        stats = GameStatistics(self.app.my_player.belief_system, self.app.config, self.app.my_wire)
+        # IMPORTANT: Use the player's CURRENT wire from the game object, not the initial self.app.my_wire
+        # The player's wire changes after swaps!
+        current_wire = self.app.my_player.get_wire()
+        stats = GameStatistics(self.app.my_player.belief_system, self.app.config, current_wire)
         
         # Get suggestions (now filtered in statistics.py)
         suggestions = stats.get_all_call_suggestions()

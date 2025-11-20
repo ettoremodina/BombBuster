@@ -1,7 +1,8 @@
 # TO DO
 
-## handle yellow cards
-- it's not a problem right now, the easiest way is to add a method to specifically remove from a belief model one value  from one position. I have no idea on how to gain information from the fact that the caller has one of the yellow cards
+## improve speed
+- if the belief model did not change after a call, do not apply the filters
+- add a buttom to run filtering
 
 ## CHECK ALL FILTERS INDIVIDUALLY
 - _apply_subset_cardinality_filter (difficult to test)
@@ -16,7 +17,9 @@
 ## IPAD interface
 
 # DONE
-
+## handle yellow cards
+- it's not a problem right now, the easiest way is to add a method to specifically remove from a belief model one value  from one position. I have no idea on how to gain information from the fact that the caller has one of the yellow cards. There is not way of adding "he has x or y" to the belief model right now and no way of using that information to filter values.
+- 
 ## called values filtering
 When a player calls a value, I can use that information to further filter possible values in their wires.
 special explanatory case: if for example one position is left for a player, and the player called only one of the two possible values, then I can remove the other value from that position

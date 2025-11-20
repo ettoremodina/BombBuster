@@ -16,8 +16,25 @@
       3
     ]
   ],
-  "double_reveals": [],
-  "swaps": [],
+  "double_reveals": [
+    [
+      "Ettore",
+      9,
+      9,
+      8
+    ]
+  ],
+  "swaps": [
+    [
+      "Ettore",
+      "Brini",
+      1,
+      1,
+      1,
+      1,
+      2
+    ]
+  ],
   "signals": [
     [
       "Brini",

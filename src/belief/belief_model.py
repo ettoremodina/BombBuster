@@ -420,7 +420,7 @@ class BeliefModel:
                 if should_keep:
                     new_called.add(pid)
             
-            tracker.called = new_called
+            tracker.called = list(new_called)
             
         # In IRL mode: if I received a value, mark it as certain for me
         # This replaces any value that was at the swap position

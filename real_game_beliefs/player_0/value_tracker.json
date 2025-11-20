@@ -3,7 +3,7 @@
     "revealed": [],
     "certain": [
       [
-        "Ettore",
+        "Brini",
         0
       ]
     ],
@@ -18,9 +18,14 @@
   },
   "2": {
     "revealed": [],
-    "certain": [],
+    "certain": [
+      [
+        "Ettore",
+        0
+      ]
+    ],
     "called": [],
-    "uncertain": "4/4"
+    "uncertain": "3/4"
   },
   "2.1": {
     "revealed": [],
@@ -130,17 +135,17 @@
     "uncertain": "3/4"
   },
   "9": {
-    "revealed": [],
-    "certain": [
-      [
-        "Ettore",
-        7
-      ],
+    "revealed": [
       [
         "Ettore",
         8
+      ],
+      [
+        "Ettore",
+        7
       ]
     ],
+    "certain": [],
     "called": [],
     "uncertain": "2/4"
   },
