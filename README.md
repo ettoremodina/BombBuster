@@ -10,7 +10,7 @@ BombBuster is a cooperative information‑deduction game engine. Each player hol
 - A Python engine (`src/game.py`, `src/player.py`) that enforces turns, calls, double reveals, swaps and win/lose conditions.
 - A belief system (`src/belief/belief_model.py`) that tracks, for every player and position, which values are still possible.
 - A collection of filters that propagate global constraints and prune impossible beliefs.
-- Utilities for both simulation and real‑life play (IRL), including a call suggester demo and human‑friendly input helpers.
+- Utilities for both simulation and real‑life play (IRL), including a call suggester demo, human‑friendly input helpers, and a graphical interface.
 
 
 ## Core game idea 🧠
@@ -33,6 +33,8 @@ Whenever a public event happens (successful or failed call, double reveal, swap)
 - Distance / sliding‑window filter 📏 – uses how many copies of a value remain for a player to limit how far from known positions that value can still appear.
 - Uncertain position–value filter 🎯 – combines global counts of remaining copies with ordering to rule out value and position pairs that can no longer be realized.
 - Subset cardinality filter 🧩 – a Sudoku‑style hidden‑subset rule across all players: when a small set of values can only appear in a matching small set of positions, other values are removed from those positions.
+- Remaining copies distance filter ⛓️ – checks if assigning a value would force a chain of identical values (due to sorting) that exceeds the total available copies of that value.
+- Called value filter 📢 – leverages "I have a X" announcements to constrain beliefs, enforcing that called values must exist in the player's hand and deducing positions when options are limited.
 
 Throughout, a Markovian assumption is used: only the current game state and the public history of actions matter for beliefs, not the exact order in which logically equivalent updates were applied.
 
@@ -41,6 +43,7 @@ Throughout, a Markovian assumption is used: only the current game state and the 
 
 - Simulation mode – generate wires, run games in code, and inspect belief states after each action. The engine handles validation of actions and win/loss detection.
 - IRL helper mode – use `play_irl.py` and utilities in `src/utils.py` to drive the engine while you play with physical cards. Human‑friendly inputs (names, 1‑indexed positions) are converted to internal actions; strict consistency checks can be relaxed with an IRL flag.
+- IRL GUI – use `play_irl_gui.py` for a graphical, click-based interface to track real-life games. It supports easy action recording, state visualization, and session saving/loading.
 - Call suggester – given a belief model and the values a player holds, suggest promising calls, prioritizing certain calls and then those with minimal remaining uncertainty.
 
 

@@ -301,14 +301,16 @@ class Game:
             if player.belief_system is not None:
                 player.belief_system.process_reveal(reveal_record)
     
-    def announce_not_present(self, player_id: int, value: Union[int, float]) -> NotPresentRecord:
+    def announce_not_present(self, player_id: int, value: Union[int, float], position: Optional[int] = None) -> NotPresentRecord:
         """
         Process an announcement where a player declares they don't have a specific value.
-        This removes the value from all of the player's possible positions.
+        This removes the value from all of the player's possible positions,
+        or from a specific position if specified.
         
         Args:
             player_id: ID of the player making the announcement
             value: The value they don't have (can be int or float)
+            position: Optional specific position (0-indexed) where the value is not present
         
         Returns:
             NotPresentRecord with the result
@@ -317,12 +319,13 @@ class Game:
             ValueError: If the announcement is invalid
         """
         # Validate the announcement
-        self._validate_not_present(player_id, value)
+        self._validate_not_present(player_id, value, position)
         
         # Create not present record
         not_present_record = NotPresentRecord(
             player_id=player_id,
             value=value,
+            position=position,
             turn_number=self.current_turn
         )
         
@@ -400,13 +403,14 @@ class Game:
             if player.belief_system is not None:
                 player.belief_system.process_has_value(player_id, value)
     
-    def _validate_not_present(self, player_id: int, value: Union[int, float]):
+    def _validate_not_present(self, player_id: int, value: Union[int, float], position: Optional[int] = None):
         """
         Validate that a not-present announcement is legal according to game rules.
         
         Args:
             player_id: ID of the player making the announcement
             value: The value being announced as not present
+            position: Optional specific position (0-indexed)
         
         Raises:
             ValueError: If the announcement violates game rules
@@ -422,12 +426,21 @@ class Game:
         # Check if value is valid
         if value not in self.config.wire_values:
             raise ValueError(f"Invalid value: {value}. Must be in {self.config.wire_values}")
+            
+        # Check if position is valid if provided
+        if position is not None:
+            if position < 0 or position >= self.config.wires_per_player:
+                raise ValueError(f"Invalid position: {position}. Must be in [0, {self.config.wires_per_player-1}]")
         
         # When not in IRL mode, validate that the player actually doesn't have this value
         if not self.config.playing_irl:
             player = self.players[player_id]
-            if value in player.wire:
-                raise ValueError(f"Player {player_id} cannot announce not having value {value} - they possess it")
+            if position is not None:
+                if player.wire[position] == value:
+                    raise ValueError(f"Player {player_id} cannot announce not having value {value} at pos {position} - they have it")
+            else:
+                if value in player.wire:
+                    raise ValueError(f"Player {player_id} cannot announce not having value {value} - they possess it")
     
     def _broadcast_not_present(self, not_present_record: NotPresentRecord):
         """

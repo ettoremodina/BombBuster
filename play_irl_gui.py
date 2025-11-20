@@ -1011,7 +1011,8 @@ class SignalActionPanel(ActionPanel):
     def clear(self):
         """Clear all selections."""
         self.clear_selections()
-        self.action_type_var.set("signal")
+        self.selected_values.clear()
+        self.update_value_buttons_state()
 
 
 class NotPresentActionPanel(ActionPanel):
@@ -1029,7 +1030,22 @@ class NotPresentActionPanel(ActionPanel):
         self.player_hand_frame = tk.Frame(self)
         self.player_hand_frame.pack(fill=tk.X, pady=5, padx=10)
         
-        self.create_value_buttons(self, "Value:", "value")
+        # Scope selector
+        scope_frame = tk.Frame(self, bg="#E8F5E9", padx=10, pady=10, relief=tk.GROOVE, borderwidth=1)
+        scope_frame.pack(fill=tk.X, pady=10, padx=5)
+        tk.Label(scope_frame, text="Scope:", width=12, anchor=tk.W, bg="#E8F5E9", font=("Arial", 10, "bold")).pack(side=tk.LEFT)
+        
+        self.scope_var = tk.StringVar(value="all")
+        tk.Radiobutton(scope_frame, text="ANYWHERE (Default)", variable=self.scope_var, 
+                      value="all", bg="#E8F5E9", font=("Arial", 10), command=self.toggle_position_selection).pack(side=tk.LEFT, padx=10)
+        tk.Radiobutton(scope_frame, text="SPECIFIC POSITION", variable=self.scope_var, 
+                      value="specific", bg="#E8F5E9", font=("Arial", 10), command=self.toggle_position_selection).pack(side=tk.LEFT, padx=10)
+        
+        # Initialize position var (needed for hand selection)
+        self.init_position_var("position")
+        
+        # Multi-select value buttons
+        self.create_multi_value_buttons(self, "Values (Select multiple):")
         
         tk.Label(self, text="ℹ️ Use when a player announces they don't have this value",
                 font=("Arial", 9, "italic"), fg="#666666").pack(pady=5)
@@ -1041,25 +1057,119 @@ class NotPresentActionPanel(ActionPanel):
                  bg="#4CAF50", fg="white", padx=30, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
         tk.Button(button_frame, text="CLEAR", command=self.clear,
                  bg="#F44336", fg="white", padx=20, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
+        
+        # Initial state
+        self.toggle_position_selection()
+
+    def create_multi_value_buttons(self, parent, label):
+        """Create value selection buttons allowing multiple selections."""
+        frame = tk.Frame(parent, bg="#F3E5F5", padx=5, pady=5, relief=tk.GROOVE, borderwidth=1)
+        frame.pack(fill=tk.X, pady=5, padx=5)
+        
+        tk.Label(frame, text=label, anchor=tk.W, bg="#F3E5F5", font=("Arial", 10, "bold")).pack()
+        
+        button_frame = tk.Frame(frame, bg="#F3E5F5")
+        button_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        self.value_buttons = {}
+        self.selected_values = set()
+        
+        for value in self.app.config.wire_values:
+            btn = tk.Button(button_frame, text=str(value), width=5,
+                           bg="white", font=("Arial", 9, "bold"),
+                           command=lambda v=value: self.toggle_value(v))
+            btn.pack(side=tk.LEFT, padx=2)
+            self.value_buttons[value] = btn
+
+    def toggle_value(self, value):
+        """Toggle selection of a value."""
+        if value in self.selected_values:
+            self.selected_values.remove(value)
+            self.value_buttons[value].config(bg="white", fg="black", relief=tk.RAISED)
+        else:
+            self.selected_values.add(value)
+            self.value_buttons[value].config(bg="#BD10E0", fg="white", relief=tk.SUNKEN)
+
+    def update_value_buttons_state(self):
+        """Update state of value buttons based on selected position beliefs."""
+        # First, ensure buttons reflect selection state (visual reset)
+        for v, btn in self.value_buttons.items():
+            if v in self.selected_values:
+                btn.config(bg="#BD10E0", fg="white", relief=tk.SUNKEN, state=tk.NORMAL)
+            else:
+                btn.config(bg="white", fg="black", relief=tk.RAISED, state=tk.NORMAL)
+
+        # If specific position is selected, disable values that are already known not to be there
+        if self.scope_var.get() == "specific" and "player" in self.selections and "position" in self.selections:
+            player_id = self.selections["player"]
+            position = self.selections["position"]
+            
+            # Get beliefs
+            if self.app.my_player and self.app.my_player.belief_system:
+                possible_values = self.app.my_player.belief_system.beliefs[player_id][position]
+                
+                for value, btn in self.value_buttons.items():
+                    if value not in possible_values:
+                        # Value is already known to be not present
+                        btn.config(state=tk.DISABLED, bg="#E0E0E0", fg="#999999")
+                        # If it was selected, deselect it
+                        if value in self.selected_values:
+                            self.selected_values.remove(value)
+
+    def select_player(self, key, player_id):
+        super().select_player(key, player_id)
+        self.update_value_buttons_state()
+
+    def select_position(self, key, position):
+        super().select_position(key, position)
+        self.update_value_buttons_state()
+
+    def toggle_position_selection(self):
+        if self.scope_var.get() == "specific":
+            # Position selection is enabled (via hand click)
+            pass
+        else:
+            self.vars["position"].set(-1)
+            if "position" in self.selections:
+                del self.selections["position"]
+            # Redraw hand to clear selection highlight
+            if "player" in self.selections:
+                self.select_player("player", self.selections["player"])
+        
+        self.update_value_buttons_state()
     
     def add_not_present(self):
         """Add the not present action."""
-        required = ["player", "value"]
-        if not all(k in self.selections for k in required):
-            messagebox.showwarning("Incomplete", "Please complete all fields")
+        if not "player" in self.selections:
+            messagebox.showwarning("Incomplete", "Please select a player")
             return
+            
+        if not self.selected_values:
+            messagebox.showwarning("Incomplete", "Please select at least one value")
+            return
+
+        if self.scope_var.get() == "specific" and "position" not in self.selections:
+             messagebox.showwarning("Incomplete", "Please select a position from the hand")
+             return
         
         player = self.app.player_names[self.selections["player"]]
-        value = self.selections["value"]
         
-        action = (player, value)
-        
-        self.app.add_action("not_present", action)
+        for value in list(self.selected_values):
+            if self.scope_var.get() == "specific":
+                position = self.selections["position"] + 1  # Convert to 1-based for consistency
+                action = (player, value, position)
+            else:
+                action = (player, value)
+            
+            self.app.add_action("not_present", action)
+            
         self.clear()
     
     def clear(self):
         """Clear all selections."""
         self.clear_selections()
+        self.scope_var.set("all")
+        self.toggle_position_selection()
 
 
 class HasValueActionPanel(ActionPanel):

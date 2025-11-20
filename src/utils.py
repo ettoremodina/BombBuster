@@ -244,14 +244,20 @@ def convert_not_present_to_internal(not_present: Tuple, player_names: Dict[int, 
     Convert a user-friendly not-present format to internal format.
     
     Args:
-        not_present: Tuple of (player, value)
+        not_present: Tuple of (player, value) or (player, value, position)
                      - player can be name (str) or ID (int)
+                     - position is 1-indexed if present
         player_names: Optional dict mapping IDs to names {0: "Alice", 1: "Bob", ...}
         
     Returns:
-        Tuple of (player_id, value)
+        Tuple of (player_id, value, position_0indexed)
     """
-    player, value = not_present
+    position = None
+    if len(not_present) == 3:
+        player, value, pos_1based = not_present
+        position = pos_1based - 1
+    else:
+        player, value = not_present
     
     # Create reverse mapping (name -> ID) if needed
     name_to_id = {}
@@ -268,7 +274,7 @@ def convert_not_present_to_internal(not_present: Tuple, player_names: Dict[int, 
             except ValueError:
                 raise ValueError(f"Invalid player: {player}. Must be player name or ID.")
     
-    return (int(player), value)
+    return (int(player), value, position)
 
 
 def format_not_present_for_user(not_present_record, player_names: Dict[int, str] = None) -> str:
@@ -287,6 +293,8 @@ def format_not_present_for_user(not_present_record, player_names: Dict[int, str]
     else:
         player_name = f"Player {not_present_record.player_id}"
     
+    if not_present_record.position is not None:
+        return f"{player_name} DOES NOT HAVE value {not_present_record.value} at pos {not_present_record.position + 1}"
     return f"{player_name} DOES NOT HAVE value {not_present_record.value}"
 
 
@@ -774,9 +782,9 @@ def run_irl_game_session(
         try:
             # Convert not-present to internal format
             internal_np = convert_not_present_to_internal(np, player_names)
-            player, val = internal_np
+            player, val, pos = internal_np
             
-            np_record = game.announce_not_present(player, val)
+            np_record = game.announce_not_present(player, val, pos)
             not_present_records.append(np_record)
         except ValueError as e:
             not_present_records.append(f"ERROR: {e}")

@@ -117,19 +117,24 @@ class SignalRecord:
 class NotPresentRecord:
     """
     Public record of a player announcing they don't have a specific value.
-    This allows removing a value from all of a player's possible positions.
+    This allows removing a value from all of a player's possible positions,
+    or from a specific position if specified.
     
     Attributes:
         player_id: ID of the player making the announcement
         value: The value they don't have (can be int or float)
+        position: Optional specific position (0-indexed) where the value is not present
         turn_number: Game turn when this announcement was made
     """
     player_id: int
     value: Union[int, float]
+    position: Optional[int] = None
     turn_number: Optional[int] = None
     
     def __repr__(self):
-        return f"Turn {self.turn_number}: P{self.player_id} NOT PRESENT value={self.value}"
+        if self.position is not None:
+            return f"Turn {self.turn_number}: P{self.player_id} DOES NOT HAVE {self.value} at pos {self.position}"
+        return f"Turn {self.turn_number}: P{self.player_id} DOES NOT HAVE {self.value}"
 
 
 @dataclass

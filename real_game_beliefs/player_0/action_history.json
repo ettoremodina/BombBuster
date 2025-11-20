@@ -1,26 +1,57 @@
 {
-  "calls": [],
+  "calls": [
+    [
+      "Brini",
+      "Frodo",
+      5,
+      5.1,
+      false
+    ],
+    [
+      "Ettore",
+      "Frodo",
+      4,
+      4,
+      true,
+      3
+    ]
+  ],
   "double_reveals": [],
   "swaps": [],
   "signals": [
     [
       "Brini",
+      6,
+      6
+    ],
+    [
+      "Brini",
+      5,
+      4
+    ]
+  ],
+  "reveals": [],
+  "not_present": [
+    [
+      "Gorgo",
+      12,
+      11
+    ],
+    [
+      "Gorgo",
       3,
-      3
+      11
+    ],
+    [
+      "Gorgo",
+      4,
+      11
+    ],
+    [
+      "Gorgo",
+      5,
+      11
     ]
   ],
-  "reveals": [
-    [
-      "Brini",
-      1,
-      1
-    ]
-  ],
-  "not_present": [],
-  "has_values": [
-    [
-      "Brini",
-      2
-    ]
-  ]
+  "has_values": []
 }

@@ -1,5 +1,8 @@
 # TO DO
 
+## handle yellow cards
+- it's not a problem right now, the easiest way is to add a method to specifically remove from a belief model one value  from one position. I have no idea on how to gain information from the fact that the caller has one of the yellow cards
+
 ## CHECK ALL FILTERS INDIVIDUALLY
 - _apply_subset_cardinality_filter (difficult to test)
 - _apply_remaining_copies_distance_filter

@@ -1,11 +1,6 @@
 {
   "1": {
-    "revealed": [
-      [
-        "Brini",
-        0
-      ]
-    ],
+    "revealed": [],
     "certain": [
       [
         "Ettore",
@@ -13,7 +8,7 @@
       ]
     ],
     "called": [],
-    "uncertain": "2/4"
+    "uncertain": "3/4"
   },
   "1.1": {
     "revealed": [],
@@ -23,14 +18,9 @@
   },
   "2": {
     "revealed": [],
-    "certain": [
-      [
-        "Brini",
-        1
-      ]
-    ],
+    "certain": [],
     "called": [],
-    "uncertain": "3/4"
+    "uncertain": "4/4"
   },
   "2.1": {
     "revealed": [],
@@ -40,14 +30,9 @@
   },
   "3": {
     "revealed": [],
-    "certain": [
-      [
-        "Brini",
-        2
-      ]
-    ],
+    "certain": [],
     "called": [],
-    "uncertain": "3/4"
+    "uncertain": "4/4"
   },
   "3.1": {
     "revealed": [],
@@ -61,27 +46,41 @@
     "uncertain": "0/1"
   },
   "4": {
-    "revealed": [],
-    "certain": [
+    "revealed": [
+      [
+        "Frodo",
+        3
+      ],
       [
         "Ettore",
         2
       ]
     ],
+    "certain": [],
     "called": [],
-    "uncertain": "3/4"
+    "uncertain": "2/4"
   },
   "5": {
     "revealed": [],
-    "certain": [],
+    "certain": [
+      [
+        "Brini",
+        3
+      ]
+    ],
     "called": [],
-    "uncertain": "4/4"
+    "uncertain": "3/4"
   },
   "5.1": {
     "revealed": [],
-    "certain": [],
+    "certain": [
+      [
+        "Brini",
+        4
+      ]
+    ],
     "called": [],
-    "uncertain": "1/1"
+    "uncertain": "0/1"
   },
   "6": {
     "revealed": [],
@@ -93,10 +92,14 @@
       [
         "Ettore",
         4
+      ],
+      [
+        "Brini",
+        5
       ]
     ],
     "called": [],
-    "uncertain": "2/4"
+    "uncertain": "1/4"
   },
   "6.5": {
     "revealed": [],

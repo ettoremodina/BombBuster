@@ -166,19 +166,27 @@ class BeliefModel:
     def process_not_present(self, not_present_record: NotPresentRecord):
         """
         Update beliefs based on a player announcing they don't have a specific value.
-        Remove the value from all of the player's possible positions.
+        Remove the value from all of the player's possible positions,
+        or from a specific position if specified.
         
         Args:
             not_present_record: The not-present announcement to process
         """
         player_id = not_present_record.player_id
         value = not_present_record.value
+        position = not_present_record.position
         
-        # Remove this value from all positions for this player
-        for position in range(len(self.beliefs[player_id])):
+        if position is not None:
+            # Remove this value only from the specific position
             if value in self.beliefs[player_id][position]:
                 if len(self.beliefs[player_id][position]) > 1:
                     self.beliefs[player_id][position].discard(value)
+        else:
+            # Remove this value from all positions for this player
+            for pos in range(len(self.beliefs[player_id])):
+                if value in self.beliefs[player_id][pos]:
+                    if len(self.beliefs[player_id][pos]) > 1:
+                        self.beliefs[player_id][pos].discard(value)
         
         # Apply filters to deduce new information
         self.apply_filters()
