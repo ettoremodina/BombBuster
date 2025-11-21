@@ -17,7 +17,7 @@ from src.utils import (
     load_action_history
 )
 from src.statistics import GameStatistics
-from gui_config import (
+from config.game_config import (
     MY_PLAYER_NAME,
     MY_WIRE,
     PLAYER_NAMES,
