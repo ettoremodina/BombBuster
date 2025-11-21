@@ -51,6 +51,9 @@ class Game:
         
         # Initialize belief systems for all players
         self._initialize_belief_systems()
+        
+        # Initialize VOID player constraints if enabled
+        self._initialize_void_player()
     
     def _initialize_belief_systems(self):
         """
@@ -74,6 +77,42 @@ class Game:
                 player.belief_system = GlobalBeliefModel(observation, self.config)
             else:
                 player.belief_system = BeliefModel(observation, self.config)
+    
+    def _initialize_void_player(self):
+        """
+        Initialize constraints for the VOID player if enabled.
+        The VOID player holds discarded wires and padding.
+        Certain wires (EXTRA_UNCERTAIN_WIRES) are revealed as NOT held by VOID.
+        """
+        from config.game_config import USE_VOID_PLAYER, PLAYER_NAMES, EXTRA_UNCERTAIN_WIRES,WIRE_DISTRIBUTION
+        
+        if not USE_VOID_PLAYER:
+            return
+        
+        # Find the VOID player ID
+        void_player_id = None
+        for i, name in enumerate(PLAYER_NAMES):
+            if name == "VOID":
+                void_player_id = i
+                break
+        
+        if void_player_id is None:
+            return  # VOID player not found
+        
+        # For each certain wire, announce that VOID doesn't have it
+        # This effectively "reveals" that these wires are in play with real players
+        for value in WIRE_DISTRIBUTION.keys():
+            # Use announce_not_present to mark that VOID doesn't have this value
+            # We use position=0 as a placeholder (it will eliminate the value from all positions)
+            if value not in EXTRA_UNCERTAIN_WIRES.keys():
+                try:
+                    self.announce_not_present(void_player_id, value)
+                except Exception as e:
+                    print(f"Warning: Could not initialize VOID player constraint for value {value}: {e}")
+
+        for pos in range(self.config.wires_per_player-1):
+            self.reveal_value(void_player_id,0,pos)
+            
     
     def make_call(self, caller_id: int, target_id: int, position: int, value: Union[int, float], 
                   success: bool, caller_position: Optional[int] = None) -> CallRecord:

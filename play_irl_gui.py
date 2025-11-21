@@ -24,7 +24,8 @@ from config.game_config import (
     BELIEF_FOLDER,
     AUTO_SAVE,
     LOAD_EXISTING,
-    USE_GLOBAL_BELIEF
+    USE_GLOBAL_BELIEF,
+    MAX_UNCERTAINTY
 )
 
 
@@ -1622,7 +1623,7 @@ class SuggesterPanel(tk.Frame):
         # Refresh display
         self.refresh()
     
-    def run_entropy_analysis(self, max_uncertainty=3):
+    def run_entropy_analysis(self, max_uncertainty=MAX_UNCERTAINTY, use_parallel=True):
         """Run entropy-based call suggester and highlight the best call."""
         if not self.app.my_player or not self.app.my_player.belief_system:
             messagebox.showwarning("No Game", "No active game to analyze")

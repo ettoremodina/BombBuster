@@ -8,18 +8,17 @@ Defines the wire distribution, number of players, and game constraints.
 # Format: {value: number_of_copies}
 WIRE_DISTRIBUTION = {
     **{i: 4 for i in range(1, 13)},  # Values 1-12 have 4 copies each
-    6.5: 1,                           # Value 2.5 has 2 copies
-    1.1:1,
-    3.1:1,
-    5.1:1,
-    2.1:1,
-    99:2,
+    3.1: 1,                       # Value 3.1 has 1 copy
+    4.1: 1,                       # Value 4.1 has 1 copy
 }
-
-MY_WIRE = [1,3.1,4,6,6,6.5,8,9,9,10,12]
-
+EXTRA_UNCERTAIN_WIRES = {
+    7.5: 1,
+    8.5: 1,
+    6.5: 1,
+}
 # Your player configuration
 MY_PLAYER_NAME = "Ettore"
+MY_WIRE = [1,3,4,6,6,7,8,9,9,10,99]
 
 # Player names (in order by player ID)
 PLAYER_NAMES = [
@@ -29,7 +28,7 @@ PLAYER_NAMES = [
     "Gorgo",
     "Andre"
 ]
-N = len(PLAYER_NAMES)  # Number of players
+
 
 # Belief folder for saving/loading game state
 BELIEF_FOLDER = "real_game_beliefs"
@@ -38,8 +37,57 @@ BELIEF_FOLDER = "real_game_beliefs"
 AUTO_SAVE = True       # Automatically save after each action
 LOAD_EXISTING = True   # Load existing beliefs on startup
 USE_GLOBAL_BELIEF = True # Use the new global belief model (True) or the old one (False)
+MAX_UNCERTAINTY = 4  # Max uncertainty level for entropy analysis
 
 
+
+
+
+# enable USE_VOID_PLAYER when EXTRA_UNCERTAIN_WIRES is non-empty
+USE_VOID_PLAYER = bool(EXTRA_UNCERTAIN_WIRES)
+N = len(PLAYER_NAMES)  # Number of players
+
+
+# Calculate if we need filler wires to make distribution divisible by number of players
+if not USE_VOID_PLAYER:
+    _initial_total = sum(WIRE_DISTRIBUTION.values())
+    _filler_needed = (N - (_initial_total % N)) % N
+    
+    if _filler_needed > 0:
+        # Add filler wires (value 99) that will be manually revealed at game start
+        WIRE_DISTRIBUTION[99] = _filler_needed
+
+if USE_VOID_PLAYER:
+    # 1. Calculate expected hand size from the base configuration
+    # Total real wires = base wires + all uncertain wires - 1 discarded
+    # We need to round UP since some players may have one extra card
+    _base_total_wires = sum(WIRE_DISTRIBUTION.values()) + sum(EXTRA_UNCERTAIN_WIRES.values()) - 1
+    _hand_size = (_base_total_wires + N - 1) // N  # Ceiling division: round up
+    
+    # 1b. Add filler wires (99) for real players if needed
+    # These are needed if the real wires don't divide evenly among real players
+    _filler_needed = (N * _hand_size) - _base_total_wires
+    if _filler_needed > 0:
+        WIRE_DISTRIBUTION[99] = _filler_needed
+
+    # 2. Add ALL extra wires (certain and uncertain) to the universe
+    WIRE_DISTRIBUTION.update(EXTRA_UNCERTAIN_WIRES)
+    
+    # 3. Add the VOID player
+    PLAYER_NAMES.append("VOID")
+    N = len(PLAYER_NAMES)
+    
+    # 4. Add padding (0-value wires) to ensure VOID has the same hand size
+    # The VOID player holds: [1 Discarded Wire from EXTRA_UNCERTAIN_WIRES] + [Padding Wires]
+    # VOID's hand size = _hand_size
+    # VOID has 1 uncertain wire from EXTRA_UNCERTAIN_WIRES
+    # So padding needed = _hand_size - 1
+    _current_total = sum(WIRE_DISTRIBUTION.values())
+    _needed_total = N * _hand_size
+    _padding_amount = _needed_total - _current_total
+    
+    if _padding_amount > 0:
+        WIRE_DISTRIBUTION[0] = _padding_amount
 
 # Derived parameters
 WIRE_VALUES = sorted(WIRE_DISTRIBUTION.keys())  # All unique values

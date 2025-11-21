@@ -1,6 +1,15 @@
 # TO DO
 
-## 3 red wures problem
+## 3 red wires problem + uneven hand sizes
+
+
+
+
+
+
+
+
+
 
 ## automatic playing
 - check if the game can play automatically and do some simulations
