@@ -258,7 +258,7 @@ class BombBusterGUI:
         
         self.current_action_type = action_type
     
-    def draw_player_hand(self, parent_frame, player_id, title=None, position_key=None, panel=None, player_key=None, highlight_positions=None, playable_values=None, certain_values=None, invalid_value=None):
+    def draw_player_hand(self, parent_frame, player_id, title=None, position_key=None, panel=None, player_key=None, highlight_positions=None, playable_values=None, certain_values=None, invalid_value=None, entropy_best_position_values=None):
         """Draw a player's hand visualization in the given frame.
         
         Args:
@@ -272,6 +272,7 @@ class BombBusterGUI:
             playable_values: Optional set of values that are playable (for coloring suggestions)
             certain_values: Optional set of values that are certain (single unrevealed value)
             invalid_value: Optional value to check - positions that cannot have this value will be greyed out
+            entropy_best_position_values: Optional dict {position -> set of values} for entropy-suggested calls
         """
         # Clear the frame
         for widget in parent_frame.winfo_children():
@@ -344,14 +345,26 @@ class BombBusterGUI:
                 bg_color = "#D3D3D3"  # Light grey background
                 border_color = "#A9A9A9"  # Dark grey border
             
-            # Check if this position has a certain value (for suggestions)
-            # Only highlight if the position has exactly 1 possible value AND it's in certain_values
-            if certain_values is not None and playable_values is not None:
-                if len(pos_beliefs) == 1:
-                    val = list(pos_beliefs)[0]
-                    if val in certain_values and not is_invalid_position:
-                        border_color = "#9B30FF"  # Purple border for certain calls
-                        border_width = 4
+            # Check if this position has a certain/entropy-suggested value (for suggestions)
+            # Highlight if ANY value in the position's beliefs is in certain_values
+            # OR if this specific position has an entropy-suggested value
+            # This covers both: certain calls (1 belief) and entropy-suggested calls (multiple beliefs)
+            if not is_invalid_position:
+                should_highlight = False
+                
+                # Check certain values (certain calls)
+                if certain_values is not None and playable_values is not None:
+                    if pos_beliefs & certain_values:  # Set intersection
+                        should_highlight = True
+                
+                # Check entropy-suggested values (position-specific)
+                if entropy_best_position_values is not None and pos in entropy_best_position_values:
+                    if pos_beliefs & entropy_best_position_values[pos]:  # Set intersection
+                        should_highlight = True
+                
+                if should_highlight:
+                    border_color = "#9B30FF"  # Purple border for certain/entropy-suggested calls
+                    border_width = 4
             
             # Create card frame
             # Use fixed size to ensure all cards are same size regardless of content
@@ -1537,6 +1550,7 @@ class SuggesterPanel(tk.Frame):
         self.app = app
         self.selected_filter_value = None  # Track selected value filter
         self.value_filter_buttons = {}  # Store value filter buttons
+        self.entropy_best_call = None  # Track the best call from entropy analysis
         
         # Header
         header_frame = tk.Frame(self, bg="#FAFAFA", relief=tk.RIDGE, borderwidth=2)
@@ -1544,9 +1558,17 @@ class SuggesterPanel(tk.Frame):
         tk.Label(header_frame, text="CALL SUGGESTIONS", font=("Arial", 14, "bold"), 
                 fg="#333333", bg="#FAFAFA").pack(pady=10)
         
+        # Button container
+        button_container = tk.Frame(header_frame, bg="#FAFAFA")
+        button_container.pack(pady=5)
+        
         # Refresh button
-        tk.Button(header_frame, text="REFRESH", command=self.refresh,
-                 bg="#FFC107", fg="black", padx=10, pady=5, font=("Arial", 10, "bold")).pack(pady=5)
+        tk.Button(button_container, text="REFRESH", command=self.refresh,
+                 bg="#FFC107", fg="black", padx=10, pady=5, font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=5)
+        
+        # Entropy suggester button
+        tk.Button(button_container, text="🧠 ENTROPY ANALYSIS", command=self.run_entropy_analysis,
+                 bg="#9C27B0", fg="white", padx=10, pady=5, font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=5)
         
         # Value filter section
         filter_frame = tk.Frame(self, bg="#F3E5F5", padx=5, pady=5, relief=tk.GROOVE, borderwidth=1)
@@ -1599,6 +1621,104 @@ class SuggesterPanel(tk.Frame):
             btn.config(bg="white", fg="black", relief=tk.RAISED)
         # Refresh display
         self.refresh()
+    
+    def run_entropy_analysis(self, max_uncertainty=3):
+        """Run entropy-based call suggester and highlight the best call."""
+        if not self.app.my_player or not self.app.my_player.belief_system:
+            messagebox.showwarning("No Game", "No active game to analyze")
+            return
+        
+        # Apply filters first
+        self.app.my_player.belief_system.apply_filters()
+        
+        # Get current wire
+        current_wire = self.app.my_player.get_wire()
+        stats = GameStatistics(self.app.my_player.belief_system, self.app.config, current_wire)
+        
+        # Show progress dialog
+        progress_window = tk.Toplevel(self.app.root)
+        progress_window.title("Analyzing...")
+        progress_window.geometry("400x150")
+        progress_window.transient(self.app.root)
+        progress_window.grab_set()
+        
+        tk.Label(progress_window, text="🧠 Running Entropy Analysis...", 
+                font=("Arial", 12, "bold")).pack(pady=10)
+        
+        progress_label = tk.Label(progress_window, text="Initializing...", 
+                font=("Arial", 9, "italic"))
+        progress_label.pack(pady=5)
+        
+        progress_bar = tk.ttk.Progressbar(progress_window, length=350, mode='determinate')
+        progress_bar.pack(pady=10)
+        
+        progress_window.update()
+        
+        # Define progress callback
+        def update_progress(current, total, message):
+            if total > 0:
+                progress_bar['value'] = (current / total) * 100
+            progress_label.config(text=message)
+            progress_window.update()
+        
+        try:
+            # Run entropy analysis with progress callback
+            result = stats.get_entropy_suggestion(max_uncertainty=max_uncertainty, 
+                                                 progress_callback=update_progress)
+            
+            # Close progress window
+            progress_window.destroy()
+            
+            if result['best_call']:
+                self.entropy_best_call = result['best_call']
+                target_id, position, value = result['best_call']
+                
+                # Show result dialog
+                result_window = tk.Toplevel(self.app.root)
+                result_window.title("Entropy Analysis Result")
+                result_window.geometry("450x250")
+                result_window.transient(self.app.root)
+                
+                result_frame = tk.Frame(result_window, bg="#F3E5F5", padx=20, pady=20)
+                result_frame.pack(fill=tk.BOTH, expand=True)
+                
+                tk.Label(result_frame, text="💡 BEST CALL BY INFORMATION GAIN", 
+                        font=("Arial", 14, "bold"), bg="#F3E5F5", fg="#6A1B9A").pack(pady=10)
+                
+                target_name = self.app.player_names.get(target_id, f"Player {target_id}")
+                call_text = f"{target_name}[{position+1}] = {value}"
+                
+                tk.Label(result_frame, text=call_text, 
+                        font=("Arial", 16, "bold"), bg="#F3E5F5", fg="#4A148C").pack(pady=10)
+                
+                info_frame = tk.Frame(result_frame, bg="#F3E5F5")
+                info_frame.pack(pady=10)
+                
+                tk.Label(info_frame, text=f"Expected Info Gain: {result['information_gain']:.4f} bits", 
+                        font=("Arial", 10), bg="#F3E5F5").pack()
+                tk.Label(info_frame, text=f"Candidates Analyzed: {result['candidates_analyzed']}", 
+                        font=("Arial", 10), bg="#F3E5F5").pack()
+                tk.Label(info_frame, text=f"Time Taken: {result['time_taken']:.2f}s", 
+                        font=("Arial", 10), bg="#F3E5F5").pack()
+                
+                tk.Label(result_frame, text="This call will be highlighted in PURPLE below", 
+                        font=("Arial", 9, "italic"), bg="#F3E5F5", fg="#666666").pack(pady=10)
+                
+                tk.Button(result_frame, text="OK", command=result_window.destroy,
+                         bg="#9C27B0", fg="white", padx=20, pady=5, font=("Arial", 10, "bold")).pack(pady=5)
+                
+                # Refresh display to show the highlighted call
+                self.refresh()
+            else:
+                messagebox.showinfo("No Suggestions", 
+                                  f"No suitable uncertain calls found (max uncertainty: {max_uncertainty})\n" +
+                                  "Try increasing max_uncertainty or make some certain calls first.")
+                self.entropy_best_call = None
+        
+        except Exception as e:
+            progress_window.destroy()
+            messagebox.showerror("Error", f"Entropy analysis failed:\n{str(e)}")
+            self.entropy_best_call = None
 
     def refresh(self):
         """Refresh the suggestions list."""
@@ -1622,14 +1742,22 @@ class SuggesterPanel(tk.Frame):
         suggestions = stats.get_all_call_suggestions()
         
         # Process suggestions to group by Player
-        suggestions_by_player = {} # target_id -> list of (position, value, uncertainty)
+        suggestions_by_player = {} # target_id -> list of (position, value, uncertainty, is_entropy_best)
         
         all_calls = suggestions['certain'] + suggestions['uncertain']
         
         for target_id, position, value, uncertainty in all_calls:
             if target_id not in suggestions_by_player:
                 suggestions_by_player[target_id] = []
-            suggestions_by_player[target_id].append((position, value, uncertainty))
+            
+            # Check if this is the entropy-suggested best call
+            is_entropy_best = False
+            if self.entropy_best_call:
+                e_target, e_pos, e_val = self.entropy_best_call
+                if target_id == e_target and position == e_pos and value == e_val:
+                    is_entropy_best = True
+            
+            suggestions_by_player[target_id].append((position, value, uncertainty, is_entropy_best))
             
         # Sort and display
         sorted_player_ids = sorted(suggestions_by_player.keys(), key=lambda pid: self.app.player_names.get(pid, str(pid)))
@@ -1646,15 +1774,24 @@ class SuggesterPanel(tk.Frame):
             hand_frame = tk.Frame(player_frame, bg="#FAFAFA")
             hand_frame.pack(fill=tk.X, pady=5)
             
-            suggested_positions = [p for p, _, _ in suggestions_by_player[target_id]]
+            suggested_positions = [p for p, _, _, _ in suggestions_by_player[target_id]]
             
             # Extract playable values for this player, categorized by certainty
             playable_values = set()
             certain_values = set()
-            for _, val, uncertainty in suggestions_by_player[target_id]:
+            # For entropy-suggested calls, we need to track position-value pairs, not just values
+            # because the same value might appear in multiple positions
+            entropy_best_position_values = {}  # position -> set of values that are entropy-best at that position
+            
+            for pos, val, uncertainty, is_entropy_best in suggestions_by_player[target_id]:
                 playable_values.add(val)
                 if uncertainty == 1:  # Certain calls have uncertainty=1 (only 1 possible value)
                     certain_values.add(val)
+                if is_entropy_best:
+                    # Track which value is entropy-best at which specific position
+                    if pos not in entropy_best_position_values:
+                        entropy_best_position_values[pos] = set()
+                    entropy_best_position_values[pos].add(val)
             
             # Apply filter if a value is selected
             invalid_value = self.selected_filter_value if self.selected_filter_value is not None else None
@@ -1663,7 +1800,8 @@ class SuggesterPanel(tk.Frame):
                                      highlight_positions=suggested_positions,
                                      playable_values=playable_values,
                                      certain_values=certain_values,
-                                     invalid_value=invalid_value)
+                                     invalid_value=invalid_value,
+                                     entropy_best_position_values=entropy_best_position_values)
 
 class EntropyPanel(tk.Frame):
     """Panel for viewing entropy statistics and information theory metrics."""

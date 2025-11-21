@@ -1,7 +1,12 @@
 # TO DO
 
+## 3 red wures problem
+
 ## automatic playing
 - check if the game can play automatically and do some simulations
+  
+## optimal choice algorithm
+
 
 ## CHECK ALL FILTERS INDIVIDUALLY
 - _apply_subset_cardinality_filter (difficult to test)

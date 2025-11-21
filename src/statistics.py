@@ -276,6 +276,25 @@ class GameStatistics:
             'uncertain': uncertain_calls
         }
     
+    def get_entropy_suggestion(self, max_uncertainty: int = 3, progress_callback=None, use_parallel: bool = True) -> Dict:
+        """
+        Get the best call suggestion based on entropy minimization.
+        Uses simulation to calculate expected information gain.
+        
+        Args:
+            max_uncertainty: Max number of possibilities to consider for simulation
+            progress_callback: Optional callback for progress updates
+            use_parallel: Whether to use parallel processing (default True)
+            
+        Returns:
+            Result dict from EntropySuggester
+        """
+        # Local import to avoid circular dependency
+        from src.belief.entropy_suggester import EntropySuggester
+        
+        suggester = EntropySuggester(self.belief_model, self.config)
+        return suggester.suggest_best_call(max_uncertainty, progress_callback=progress_callback, use_parallel=use_parallel)
+
     def print_call_suggestions(self, player_names: Dict[int, str] = None):
         """
         Print all available call suggestions in a readable format.
@@ -291,7 +310,7 @@ class GameStatistics:
         print(f"CALL SUGGESTIONS for {my_name}")
         print(f"{'='*80}")
         
-        my_values = self.get_certain_values()
+        my_values = self.get_playable_values()
         print(f"\nYour values (can call): {sorted(my_values)}")
         
         # Print certain calls
@@ -331,23 +350,28 @@ class GameStatistics:
         else:
             print(f"\n⚠️  UNCERTAIN CALLS: None available")
         
-        # Print best suggestion
-        best = self.suggest_call()
-        if best:
-            target_id, position, value = best
-            target_name = player_names.get(target_id, f"Player {target_id}") if player_names else f"Player {target_id}"
-            is_certain = any(t == target_id and p == position and v == value 
-                           for t, p, v, _ in certain)
-            certainty_str = "CERTAIN" if is_certain else "BEST UNCERTAIN"
+        # Print best suggestion (Entropy Based)
+        if not certain and uncertain:
             print(f"\n{'='*80}")
-            print(f"💡 RECOMMENDED CALL ({certainty_str}):")
-            print(f"   {my_name} → {target_name}[{position+1}] = {value}")
+            print(f"🧠 ANALYZING BEST UNCERTAIN CALL (Entropy Simulation)...")
+            entropy_result = self.get_entropy_suggestion(max_uncertainty=3)
+            
+            best_call = entropy_result['best_call']
+            if best_call:
+                target_id, position, value = best_call
+                target_name = player_names.get(target_id, f"Player {target_id}") if player_names else f"Player {target_id}"
+                
+                print(f"💡 RECOMMENDED CALL (Max Info Gain):")
+                print(f"   {my_name} → {target_name}[{position+1}] = {value}")
+                print(f"   Expected Info Gain: {entropy_result['information_gain']:.4f} bits")
+                print(f"   Time taken: {entropy_result['time_taken']:.2f}s ({entropy_result['candidates_analyzed']} simulations)")
+            else:
+                print(f"   No suitable candidates for simulation (too uncertain or no playable values).")
             print(f"{'='*80}")
-        else:
-            print(f"\n{'='*80}")
-            print(f"⚠️  NO CALLS AVAILABLE")
-            print(f"   (You may not have values that match any known positions)")
-            print(f"{'='*80}")
+        elif certain:
+             print(f"\n{'='*80}")
+             print(f"💡 RECOMMENDATION: Take any CERTAIN call.")
+             print(f"{'='*80}")
     
     def print_statistics(self, player_names: Dict[int, str] = None):
         """

@@ -292,3 +292,25 @@ class GlobalBeliefModel(BeliefModel):
         if self.config.auto_filter:
             self.apply_filters()
 
+    def clone(self) -> 'GlobalBeliefModel':
+        """
+        Create a deep copy of the global belief model.
+        """
+        new_model = super().clone()
+        
+        # Copy GlobalBeliefModel specific attributes
+        new_model.sorted_values = self.sorted_values
+        new_model.val_to_idx = self.val_to_idx
+        new_model.idx_to_val = self.idx_to_val
+        new_model.K = self.K
+        new_model.total_deck = self.total_deck
+        
+        # Deep copy constraints
+        new_model.copy_count_constraints = self.copy_count_constraints.copy()
+        new_model.adjacent_constraints = self.adjacent_constraints.copy()
+        
+        # Share the cache (it's safe as keys are hashes of state)
+        new_model._signature_cache = self._signature_cache
+        
+        return new_model
+

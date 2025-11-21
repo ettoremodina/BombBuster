@@ -1,0 +1,184 @@
+{
+  "1": {
+    "revealed": [],
+    "certain": [
+      [
+        "Ettore",
+        0
+      ]
+    ],
+    "called": [],
+    "uncertain": "3/4"
+  },
+  "1.1": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "1/1"
+  },
+  "2": {
+    "revealed": [
+      [
+        "Frodo",
+        3
+      ]
+    ],
+    "certain": [],
+    "called": [],
+    "uncertain": "3/4"
+  },
+  "2.1": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "1/1"
+  },
+  "3": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "4/4"
+  },
+  "3.1": {
+    "revealed": [],
+    "certain": [
+      [
+        "Ettore",
+        1
+      ]
+    ],
+    "called": [],
+    "uncertain": "0/1"
+  },
+  "4": {
+    "revealed": [],
+    "certain": [
+      [
+        "Ettore",
+        2
+      ]
+    ],
+    "called": [],
+    "uncertain": "3/4"
+  },
+  "5": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "4/4"
+  },
+  "5.1": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "1/1"
+  },
+  "6": {
+    "revealed": [
+      [
+        "Brini",
+        4
+      ],
+      [
+        "Ettore",
+        3
+      ]
+    ],
+    "certain": [
+      [
+        "Ettore",
+        4
+      ]
+    ],
+    "called": [],
+    "uncertain": "1/4"
+  },
+  "6.5": {
+    "revealed": [],
+    "certain": [
+      [
+        "Ettore",
+        5
+      ]
+    ],
+    "called": [],
+    "uncertain": "0/1"
+  },
+  "7": {
+    "revealed": [],
+    "certain": [],
+    "called": [
+      "Brini"
+    ],
+    "uncertain": "3/4"
+  },
+  "8": {
+    "revealed": [],
+    "certain": [
+      [
+        "Ettore",
+        6
+      ],
+      [
+        "Brini",
+        6
+      ]
+    ],
+    "called": [],
+    "uncertain": "2/4"
+  },
+  "9": {
+    "revealed": [
+      [
+        "Brini",
+        7
+      ]
+    ],
+    "certain": [
+      [
+        "Ettore",
+        7
+      ],
+      [
+        "Ettore",
+        8
+      ]
+    ],
+    "called": [],
+    "uncertain": "1/4"
+  },
+  "10": {
+    "revealed": [],
+    "certain": [
+      [
+        "Ettore",
+        9
+      ]
+    ],
+    "called": [],
+    "uncertain": "3/4"
+  },
+  "11": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "4/4"
+  },
+  "12": {
+    "revealed": [],
+    "certain": [
+      [
+        "Ettore",
+        10
+      ]
+    ],
+    "called": [],
+    "uncertain": "3/4"
+  },
+  "99": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "2/2"
+  }
+}

@@ -1397,4 +1397,33 @@ class BeliefModel:
         
         return cls.from_dict(combined_data, observation, config, player_names)
     
-   
+    def clone(self) -> 'BeliefModel':
+        """
+        Create a deep copy of the belief model.
+        """
+        # Create a new instance without calling __init__ to avoid re-initialization overhead
+        new_model = self.__class__.__new__(self.__class__)
+        
+        # Copy immutable/shared attributes
+        new_model.my_player_id = self.my_player_id
+        new_model.observation = self.observation
+        new_model.config = self.config
+        
+        # Deep copy beliefs
+        new_model.beliefs = {}
+        for pid, positions in self.beliefs.items():
+            new_model.beliefs[pid] = {}
+            for pos, values in positions.items():
+                new_model.beliefs[pid][pos] = values.copy()
+        
+        # Deep copy value trackers
+        new_model.value_trackers = {}
+        for val, tracker in self.value_trackers.items():
+            new_tracker = ValueTracker(tracker.value, tracker.total)
+            new_tracker.revealed = list(tracker.revealed)
+            new_tracker.certain = list(tracker.certain)
+            new_tracker.called = list(tracker.called)
+            new_model.value_trackers[val] = new_tracker
+            
+        return new_model
+
