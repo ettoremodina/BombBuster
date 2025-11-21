@@ -6,7 +6,7 @@ for every wire position across all players from their perspective.
 
 from typing import Dict, Set, List, Optional, Union, Tuple
 from itertools import combinations
-from src.data_structures import CallRecord, DoubleRevealRecord, SwapRecord, SignalRecord, NotPresentRecord, GameObservation, ValueTracker
+from src.data_structures import CallRecord, DoubleRevealRecord, SwapRecord, SignalRecord, NotPresentRecord, SignalCopyCountRecord, SignalAdjacentRecord, GameObservation, ValueTracker
 from config.game_config import GameConfig
 import json
 from pathlib import Path
@@ -95,7 +95,8 @@ class BeliefModel:
             self._process_failed_call(call_record)
         
         # Apply filters after processing the call to deduce new information
-        self.apply_filters()
+        if self.config.auto_filter:
+            self.apply_filters()
     
     def process_double_reveal(self, reveal_record: DoubleRevealRecord):
         """
@@ -119,7 +120,8 @@ class BeliefModel:
         self.value_trackers[value].add_revealed(player_id, pos2)
         
         # Apply filters to deduce new information
-        self.apply_filters()
+        if self.config.auto_filter:
+            self.apply_filters()
     
     def process_signal(self, signal_record: SignalRecord):
         """
@@ -140,7 +142,8 @@ class BeliefModel:
         self.value_trackers[value].add_certain(player_id, position)
         
         # Apply filters to deduce new information
-        self.apply_filters()
+        if self.config.auto_filter:
+            self.apply_filters()
     
     def process_reveal(self, signal_record: SignalRecord):
         """
@@ -161,7 +164,8 @@ class BeliefModel:
         self.value_trackers[value].add_revealed(player_id, position)
         
         # Apply filters to deduce new information
-        self.apply_filters()
+        if self.config.auto_filter:
+            self.apply_filters()
     
     def process_not_present(self, not_present_record: NotPresentRecord):
         """
@@ -189,7 +193,8 @@ class BeliefModel:
                         self.beliefs[player_id][pos].discard(value)
         
         # Apply filters to deduce new information
-        self.apply_filters()
+        if self.config.auto_filter:
+            self.apply_filters()
     
     def process_has_value(self, player_id: int, value: Union[int, float]):
         """
@@ -205,7 +210,81 @@ class BeliefModel:
             self.value_trackers[value].add_called(player_id)
         
         # Apply filters to deduce new information
-        self.apply_filters()
+        if self.config.auto_filter:
+            self.apply_filters()
+    
+    def process_copy_count_signal(self, signal_record: SignalCopyCountRecord):
+        """
+        Update beliefs based on a copy count signal.
+        When a player signals that a position has a value with a specific number of copies.
+        
+        This filters the belief set at that position to only include values with the signaled copy count.
+        
+        NOTE: This method only works with BeliefModel (not GlobalBeliefModel) because it filters
+        individual position beliefs based on value properties.
+        
+        Args:
+            signal_record: The copy count signal to process
+        """
+        player_id = signal_record.player_id
+        position = signal_record.position
+        copy_count = signal_record.copy_count
+        
+        # Filter beliefs at this position to only include values with the signaled copy count
+        current_beliefs = self.beliefs[player_id][position]
+        filtered_beliefs = {v for v in current_beliefs if self.config.wire_distribution[v] == copy_count}
+        
+        # Update beliefs
+        if filtered_beliefs:
+            self.beliefs[player_id][position] = filtered_beliefs
+        
+        # Apply filters to deduce new information
+        if self.config.auto_filter:
+            self.apply_filters()
+    
+    def process_adjacent_signal(self, signal_record: SignalAdjacentRecord):
+        """
+        Update beliefs based on an adjacent position signal.
+        When a player signals that two adjacent positions have the same or different values.
+        
+        This constrains the belief sets of the two positions based on the relationship:
+        - If is_equal=True: intersection of beliefs for both positions
+        - If is_equal=False: remove values that appear in both positions
+        
+        Args:
+            signal_record: The adjacent signal to process
+        """
+        player_id = signal_record.player_id
+        pos1 = signal_record.position1
+        pos2 = signal_record.position2
+        is_equal = signal_record.is_equal
+        
+        beliefs1 = self.beliefs[player_id][pos1]
+        beliefs2 = self.beliefs[player_id][pos2]
+        
+        if is_equal:
+            # Both positions must have the same value
+            # The possible values are the intersection of both belief sets
+            common_values = beliefs1 & beliefs2
+            if common_values:
+                self.beliefs[player_id][pos1] = common_values
+                self.beliefs[player_id][pos2] = common_values
+        else:
+            # Positions have different values
+            # Remove values from pos1 that are only possible at pos2 if pos2 is certain
+            # and vice versa
+            if len(beliefs2) == 1:
+                # pos2 is certain, so pos1 cannot have that value
+                certain_value = next(iter(beliefs2))
+                self.beliefs[player_id][pos1] = beliefs1 - {certain_value}
+            if len(beliefs1) == 1:
+                # pos1 is certain, so pos2 cannot have that value
+                certain_value = next(iter(beliefs1))
+                self.beliefs[player_id][pos2] = beliefs2 - {certain_value}
+        
+        # Apply filters to deduce new information
+        if self.config.auto_filter:
+            self.apply_filters()
     
     def process_swap(self, swap_record: SwapRecord):
         """
@@ -275,7 +354,8 @@ class BeliefModel:
                 k += 1
 
         # Apply filters to deduce new information
-        self.apply_filters()
+        if self.config.auto_filter:
+            self.apply_filters()
 
     def calculate_new_position(self, player_id: int, old_pos: int, 
                                 swap_player_id: int, init_pos: int, final_pos: int) -> int:

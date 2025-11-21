@@ -476,7 +476,9 @@ def save_action_history(belief_folder: str, player_id: int,
                        calls: List[Tuple], double_reveals: List[Tuple],
                        swaps: List[Tuple], signals: List[Tuple],
                        reveals: List[Tuple], not_present: List[Tuple],
-                       has_values: List[Tuple] = None):
+                       has_values: List[Tuple] = None,
+                       copy_count_signals: List[Tuple] = None,
+                       adjacent_signals: List[Tuple] = None):
     """
     Save the action history to track what has been processed.
     
@@ -490,11 +492,17 @@ def save_action_history(belief_folder: str, player_id: int,
         reveals: List of reveal tuples
         not_present: List of not-present tuples
         has_values: List of has-value tuples
+        copy_count_signals: List of copy count signal tuples
+        adjacent_signals: List of adjacent signal tuples
     """
     from pathlib import Path
     
     if has_values is None:
         has_values = []
+    if copy_count_signals is None:
+        copy_count_signals = []
+    if adjacent_signals is None:
+        adjacent_signals = []
     
     belief_path = Path(belief_folder)
     player_dir = belief_path / f"player_{player_id}"
@@ -509,7 +517,9 @@ def save_action_history(belief_folder: str, player_id: int,
         "signals": signals,
         "reveals": reveals,
         "not_present": not_present,
-        "has_values": has_values
+        "has_values": has_values,
+        "copy_count_signals": copy_count_signals,
+        "adjacent_signals": adjacent_signals
     }
     
     with history_file.open("w", encoding="utf-8") as fh:
@@ -567,6 +577,8 @@ def run_irl_game_session(
     reveals: List[Tuple] = None,
     not_present: List[Tuple] = None,
     has_values: List[Tuple] = None,
+    copy_count_signals: List[Tuple] = None,
+    adjacent_signals: List[Tuple] = None,
     save_to_json: bool = True,
     load_from_json: bool = True
 ) -> Dict:
@@ -609,6 +621,10 @@ def run_irl_game_session(
         not_present = []
     if has_values is None:
         has_values = []
+    if copy_count_signals is None:
+        copy_count_signals = []
+    if adjacent_signals is None:
+        adjacent_signals = []
     
     # Validate wire length
     if len(my_wire) != config.wires_per_player:
@@ -668,6 +684,8 @@ def run_irl_game_session(
     reveals_to_process = reveals
     not_present_to_process = not_present
     has_values_to_process = has_values
+    copy_count_signals_to_process = copy_count_signals
+    adjacent_signals_to_process = adjacent_signals
     processed_incrementally = False
     
     # If both save and load are enabled, only process new actions
@@ -682,14 +700,18 @@ def run_irl_game_session(
             reveals_to_process = get_new_actions(old_history.get("reveals", []), reveals)
             not_present_to_process = get_new_actions(old_history.get("not_present", []), not_present)
             has_values_to_process = get_new_actions(old_history.get("has_values", []), has_values)
+            copy_count_signals_to_process = get_new_actions(old_history.get("copy_count_signals", []), copy_count_signals)
+            adjacent_signals_to_process = get_new_actions(old_history.get("adjacent_signals", []), adjacent_signals)
             
             if any([calls_to_process, double_reveals_to_process, swaps_to_process, 
-                   signals_to_process, reveals_to_process, not_present_to_process, has_values_to_process]):
+                   signals_to_process, reveals_to_process, not_present_to_process, has_values_to_process,
+                   copy_count_signals_to_process, adjacent_signals_to_process]):
                 processed_incrementally = True
                 print(f"\n⚡ Incremental update: Processing {len(calls_to_process)} new calls, "
                       f"{len(double_reveals_to_process)} double reveals, {len(swaps_to_process)} swaps, "
                       f"{len(signals_to_process)} signals, {len(reveals_to_process)} reveals, "
-                      f"{len(not_present_to_process)} not-present, {len(has_values_to_process)} has-values")
+                      f"{len(not_present_to_process)} not-present, {len(has_values_to_process)} has-values, "
+                      f"{len(copy_count_signals_to_process)} copy-count, {len(adjacent_signals_to_process)} adjacent")
             else:
                 print(f"\n✓ No new actions to process")
 
@@ -737,6 +759,8 @@ def run_irl_game_session(
     reveal_records = []
     not_present_records = []
     has_value_records = []
+    copy_count_signal_records = []
+    adjacent_signal_records = []
     
     for call in calls_to_process:
         try:
@@ -838,6 +862,45 @@ def run_irl_game_session(
         except ValueError as e:
             has_value_records.append(f"ERROR: {e}")
     
+    # Process copy count signals
+    for ccs in copy_count_signals_to_process:
+        try:
+            # Format: (player_name/id, position_0indexed, copy_count)
+            if isinstance(ccs, tuple) and len(ccs) >= 3:
+                # Create reverse mapping (name -> ID) if needed
+                player_id = ccs[0]
+                if isinstance(player_id, str) and player_names:
+                    name_to_id = {name: pid for pid, name in player_names.items()}
+                    player_id = name_to_id.get(player_id, int(player_id))
+                
+                position = ccs[1]
+                copy_count = ccs[2]
+                
+                record = game.signal_copy_count(int(player_id), position, copy_count)
+                copy_count_signal_records.append(record)
+        except ValueError as e:
+            copy_count_signal_records.append(f"ERROR: {e}")
+    
+    # Process adjacent signals
+    for adj in adjacent_signals_to_process:
+        try:
+            # Format: (player_name/id, pos1_0indexed, pos2_0indexed, is_equal)
+            if isinstance(adj, tuple) and len(adj) >= 4:
+                # Create reverse mapping (name -> ID) if needed
+                player_id = adj[0]
+                if isinstance(player_id, str) and player_names:
+                    name_to_id = {name: pid for pid, name in player_names.items()}
+                    player_id = name_to_id.get(player_id, int(player_id))
+                
+                pos1 = adj[1]
+                pos2 = adj[2]
+                is_equal = adj[3]
+                
+                record = game.signal_adjacent(int(player_id), pos1, pos2, is_equal)
+                adjacent_signal_records.append(record)
+        except ValueError as e:
+            adjacent_signal_records.append(f"ERROR: {e}")
+    
     # Get game state
     state = game.get_game_state()
     
@@ -848,7 +911,8 @@ def run_irl_game_session(
             my_player.belief_system.save_to_folder(belief_folder, player_names)
             # Also save action history to enable incremental processing
             save_action_history(belief_folder, my_player_id, 
-                              calls, double_reveals, swaps, signals, reveals, not_present, has_values)
+                              calls, double_reveals, swaps, signals, reveals, not_present, has_values,
+                              copy_count_signals, adjacent_signals)
         except Exception as e:
             print(f"⚠️  Warning: Could not save belief state: {e}")
     
@@ -864,6 +928,8 @@ def run_irl_game_session(
         'reveal_records': reveal_records,
         'not_present_records': not_present_records,
         'has_value_records': has_value_records,
+        'copy_count_signal_records': copy_count_signal_records,
+        'adjacent_signal_records': adjacent_signal_records,
         'loaded_from_file': loaded_from_file,
         'processed_incrementally': processed_incrementally,
         'belief_folder': belief_folder,

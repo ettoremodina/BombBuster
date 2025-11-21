@@ -99,18 +99,61 @@ class SignalRecord:
     This is a direct announcement of knowledge, useful for speeding up IRL gameplay.
     
     Attributes:
-        player_id: ID of the player making the signal
-        value: The value at the position (can be int or float)
-        position: Wire position being signaled (0-indexed)
+        player_id: ID of the player signaling
+        position: Wire position (0-indexed)
+        value: The value being signaled
         turn_number: Game turn when this signal was made
     """
     player_id: int
-    value: Union[int, float]
     position: int
+    value: Union[int, float]
     turn_number: Optional[int] = None
     
     def __repr__(self):
-        return f"Turn {self.turn_number}: P{self.player_id} SIGNALS [{self.position}]={self.value}"
+        return f"Turn {self.turn_number}: P{self.player_id} SIGNAL [{self.position}]={self.value}"
+
+
+@dataclass
+class SignalCopyCountRecord:
+    """
+    Public record of a player signaling the number of copies of the value at a position.
+    
+    Attributes:
+        player_id: ID of the player signaling
+        position: Wire position (0-indexed)
+        copy_count: The number of copies (1, 2, or 3)
+        turn_number: Game turn when this signal was made
+    """
+    player_id: int
+    position: int
+    copy_count: int
+    turn_number: Optional[int] = None
+    
+    def __repr__(self):
+        return f"Turn {self.turn_number}: P{self.player_id} SIGNAL COPIES [{self.position}]=x{self.copy_count}"
+
+
+@dataclass
+class SignalAdjacentRecord:
+    """
+    Public record of a player signaling that two adjacent wires have the same or different values.
+    
+    Attributes:
+        player_id: ID of the player signaling
+        position1: First wire position
+        position2: Second wire position
+        is_equal: True if values are equal, False if different
+        turn_number: Game turn when this signal was made
+    """
+    player_id: int
+    position1: int
+    position2: int
+    is_equal: bool
+    turn_number: Optional[int] = None
+    
+    def __repr__(self):
+        relation = "==" if self.is_equal else "!="
+        return f"Turn {self.turn_number}: P{self.player_id} SIGNAL ADJ [{self.position1}] {relation} [{self.position2}]"
 
 
 @dataclass

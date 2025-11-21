@@ -42,7 +42,8 @@ class GameConfig:
         n_players: int = N,
         max_wrong_calls: int = MAX_WRONG_CALLS,
         playing_irl: bool = False,
-        use_global_belief: bool = False
+        use_global_belief: bool = False,
+        auto_filter: bool = True
     ):
         """
         Initialize game configuration.
@@ -54,12 +55,14 @@ class GameConfig:
             playing_irl: If True, disables validation that caller possesses the called value
                         (useful when playing with physical cards where wires may not match simulation)
             use_global_belief: Whether to use the GlobalBeliefModel (True) or standard BeliefModel (False)
+            auto_filter: Whether to automatically apply filters after every action (True) or wait for manual trigger (False)
         """
         self.wire_distribution = wire_distribution if wire_distribution is not None else WIRE_DISTRIBUTION
         self.n_players = n_players
         self.max_wrong_calls = max_wrong_calls
         self.playing_irl = playing_irl
         self.use_global_belief = use_global_belief
+        self.auto_filter = auto_filter
         
         # Derived values
         self.wire_values = sorted(self.wire_distribution.keys())

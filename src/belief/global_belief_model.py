@@ -1,6 +1,6 @@
 from typing import Dict, Set, List, Optional, Union, Tuple
 from src.belief.belief_model import BeliefModel
-from src.data_structures import GameObservation
+from src.data_structures import GameObservation, SignalCopyCountRecord, SignalAdjacentRecord
 from config.game_config import GameConfig
 import collections
 
@@ -28,6 +28,14 @@ class GlobalBeliefModel(BeliefModel):
         for v in self.sorted_values:
             total_deck[self.val_to_idx[v]] = config.get_copies(v)
         self.total_deck = tuple(total_deck)
+        
+        # Constraint tracking for copy count signals
+        # Key: (player_id, position), Value: required copy count (1, 2, or 3)
+        self.copy_count_constraints: Dict[Tuple[int, int], int] = {}
+        
+        # Constraint tracking for adjacent signals
+        # Key: (player_id, pos1, pos2), Value: is_equal (True if same, False if different)
+        self.adjacent_constraints: Dict[Tuple[int, int, int], bool] = {}
         
         super().__init__(observation, config)
 
@@ -184,15 +192,26 @@ class GlobalBeliefModel(BeliefModel):
         
         # Prepare for recursion
         # We generate sorted hands, then convert to signature
-        # To optimize, we can generate signatures directly? 
-        # No, we need to check positional constraints (beliefs).
-        # So we generate sorted hands.
+        # We need to track the actual hand to check positional constraints
         
         current_hand = [None] * hand_size
         
         def backtrack(pos: int, min_val_idx: int, current_counts: Dict[int, int]):
             if pos == hand_size:
-                # Hand complete
+                # Hand complete - validate all constraints before adding
+                
+                # Check adjacent constraints
+                for (pid, p1, p2), is_equal in self.adjacent_constraints.items():
+                    if pid == player_id:
+                        # Ensure positions are within the hand we're building
+                        if p1 < hand_size and p2 < hand_size:
+                            val1 = current_hand[p1]
+                            val2 = current_hand[p2]
+                            if is_equal and val1 != val2:
+                                return  # Constraint violated
+                            if not is_equal and val1 == val2:
+                                return  # Constraint violated
+                
                 # Convert counts to signature vector
                 sig = [0] * self.K
                 for v_idx, count in current_counts.items():
@@ -207,6 +226,13 @@ class GlobalBeliefModel(BeliefModel):
             
             possible_values = player_beliefs[pos]
             
+            # Check copy count constraint for this position
+            if (player_id, pos) in self.copy_count_constraints:
+                required_copies = self.copy_count_constraints[(player_id, pos)]
+                # Filter possible values to only those with required copy count
+                possible_values = {v for v in possible_values 
+                                 if self.config.wire_distribution[v] == required_copies}
+            
             # Iterate through sorted values starting from min_val_idx
             for v_idx in range(min_val_idx, self.K):
                 val = self.sorted_values[v_idx]
@@ -219,19 +245,35 @@ class GlobalBeliefModel(BeliefModel):
                 if current_counts.get(v_idx, 0) >= self.config.get_copies(val):
                     continue
                 
-                # Optimization: Pruning based on remaining slots
-                # If we need k more copies of X (from min_counts), and we only have s slots left,
-                # and we are already past X... fail.
-                # This is complex to check efficiently.
-                # Simpler: Check if we can satisfy min_counts for values >= val
+                # Check adjacent equality constraint (early pruning)
+                # If previous position exists and we have an adjacent constraint
+                if pos > 0:
+                    # Check if there's a constraint between pos-1 and pos
+                    if (player_id, pos-1, pos) in self.adjacent_constraints:
+                        is_equal = self.adjacent_constraints[(player_id, pos-1, pos)]
+                        prev_val = current_hand[pos-1]
+                        if is_equal and val != prev_val:
+                            continue  # Must be equal but isn't
+                        if not is_equal and val == prev_val:
+                            continue  # Must be different but isn't
+                    # Also check reverse ordering (pos, pos-1)
+                    if (player_id, pos, pos-1) in self.adjacent_constraints:
+                        is_equal = self.adjacent_constraints[(player_id, pos, pos-1)]
+                        prev_val = current_hand[pos-1]
+                        if is_equal and val != prev_val:
+                            continue
+                        if not is_equal and val == prev_val:
+                            continue
                 
                 # Update state
+                current_hand[pos] = val
                 current_counts[v_idx] = current_counts.get(v_idx, 0) + 1
                 
                 # Recurse
                 backtrack(pos + 1, v_idx, current_counts)
                 
                 # Backtrack
+                current_hand[pos] = None
                 current_counts[v_idx] -= 1
                 if current_counts[v_idx] == 0:
                     del current_counts[v_idx]
@@ -300,3 +342,75 @@ class GlobalBeliefModel(BeliefModel):
             # If domain becomes empty, that's an issue (shouldn't happen if logic is correct)
             if not self.beliefs[player_id][pos]:
                 print(f"CRITICAL: Belief for P{player_id} Pos{pos} became empty during projection!")
+    
+    def process_copy_count_signal(self, signal_record: SignalCopyCountRecord):
+        """
+        Override to handle copy count signals with GlobalBeliefModel.
+        
+        Stores the constraint and enforces it during signature generation.
+        The global consistency algorithm will natively respect this constraint.
+        
+        Args:
+            signal_record: The copy count signal to process
+        """
+        player_id = signal_record.player_id
+        position = signal_record.position
+        copy_count = signal_record.copy_count
+        
+        # Store the constraint for use in signature generation
+        self.copy_count_constraints[(player_id, position)] = copy_count
+        
+        # Also apply immediate filtering to beliefs
+        current_beliefs = self.beliefs[player_id][position]
+        filtered_beliefs = {v for v in current_beliefs if self.config.wire_distribution[v] == copy_count}
+        
+        if filtered_beliefs:
+            self.beliefs[player_id][position] = filtered_beliefs
+        
+        # Run global solver to propagate constraints
+        if self.config.auto_filter:
+            self.apply_filters()
+    
+    def process_adjacent_signal(self, signal_record: SignalAdjacentRecord):
+        """
+        Override to handle adjacent position signals with GlobalBeliefModel.
+        
+        Stores the constraint and enforces it during signature generation.
+        The global consistency algorithm will natively respect this constraint.
+        
+        Args:
+            signal_record: The adjacent signal to process
+        """
+        player_id = signal_record.player_id
+        pos1 = signal_record.position1
+        pos2 = signal_record.position2
+        is_equal = signal_record.is_equal
+        
+        # Store the constraint for use in signature generation
+        # Normalize to always store (smaller_pos, larger_pos)
+        min_pos, max_pos = min(pos1, pos2), max(pos1, pos2)
+        self.adjacent_constraints[(player_id, min_pos, max_pos)] = is_equal
+        
+        # Also apply immediate filtering to beliefs
+        beliefs1 = self.beliefs[player_id][pos1]
+        beliefs2 = self.beliefs[player_id][pos2]
+        
+        if is_equal:
+            # Both positions must have the same value
+            common_values = beliefs1 & beliefs2
+            if common_values:
+                self.beliefs[player_id][pos1] = common_values
+                self.beliefs[player_id][pos2] = common_values
+        else:
+            # Positions have different values - filter if either is certain
+            if len(beliefs2) == 1:
+                certain_value = next(iter(beliefs2))
+                self.beliefs[player_id][pos1] = beliefs1 - {certain_value}
+            if len(beliefs1) == 1:
+                certain_value = next(iter(beliefs1))
+                self.beliefs[player_id][pos2] = beliefs2 - {certain_value}
+        
+        # Run global solver to propagate constraints
+        if self.config.auto_filter:
+            self.apply_filters()
+

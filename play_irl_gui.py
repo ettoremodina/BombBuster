@@ -59,6 +59,8 @@ class BombBusterGUI:
         self.reveals = []
         self.not_present = []
         self.has_values = []
+        self.copy_count_signals = []
+        self.adjacent_signals = []
         
         # Game objects
         self.game = None
@@ -68,7 +70,7 @@ class BombBusterGUI:
         self.current_action_type = "call"
         
         # Create config
-        self.config = GameConfig(playing_irl=True, use_global_belief=self.use_global_belief)
+        self.config = GameConfig(playing_irl=True, use_global_belief=self.use_global_belief, auto_filter=False)
         
         # Load existing actions if available
         if self.load_existing:
@@ -81,6 +83,8 @@ class BombBusterGUI:
                 self.reveals = old_history.get("reveals", [])
                 self.not_present = old_history.get("not_present", [])
                 self.has_values = old_history.get("has_values", [])
+                self.copy_count_signals = old_history.get("copy_count_signals", [])
+                self.adjacent_signals = old_history.get("adjacent_signals", [])
         
         # Initialize game
         self.initialize_game()
@@ -103,6 +107,8 @@ class BombBusterGUI:
             reveals=self.reveals,
             not_present=self.not_present,
             has_values=self.has_values,
+            copy_count_signals=self.copy_count_signals,
+            adjacent_signals=self.adjacent_signals,
             save_to_json=self.auto_save,
             load_from_json=self.load_existing
         )
@@ -195,9 +201,11 @@ class BombBusterGUI:
             ("SWAP", "swap"),
             ("DOUBLE REVEAL", "double_reveal"),
             ("SIGNAL", "signal"),
+            ("ADV SIGNALS", "advanced_signals"),
             ("NOT PRESENT", "not_present"),
             ("HAS VALUE", "has_value"),
-            ("SUGGESTIONS", "suggestions")
+            ("SUGGESTIONS", "suggestions"),
+            ("ENTROPY", "entropy")
         ]
         
         self.action_buttons = {}
@@ -214,18 +222,22 @@ class BombBusterGUI:
         self.swap_panel = SwapActionPanel(self.action_container, self)
         self.double_reveal_panel = DoubleRevealActionPanel(self.action_container, self)
         self.signal_panel = SignalActionPanel(self.action_container, self)
+        self.advanced_signals_panel = AdvancedSignalsPanel(self.action_container, self)
         self.not_present_panel = NotPresentActionPanel(self.action_container, self)
         self.has_value_panel = HasValueActionPanel(self.action_container, self)
         self.suggester_panel = SuggesterPanel(self.action_container, self)
+        self.entropy_panel = EntropyPanel(self.action_container, self)
         
         self.panels = {
             "call": self.call_panel,
             "swap": self.swap_panel,
             "double_reveal": self.double_reveal_panel,
             "signal": self.signal_panel,
+            "advanced_signals": self.advanced_signals_panel,
             "not_present": self.not_present_panel,
             "has_value": self.has_value_panel,
-            "suggestions": self.suggester_panel
+            "suggestions": self.suggester_panel,
+            "entropy": self.entropy_panel
         }
     
     def switch_action_panel(self, action_type):
@@ -246,7 +258,7 @@ class BombBusterGUI:
         
         self.current_action_type = action_type
     
-    def draw_player_hand(self, parent_frame, player_id, title=None, position_key=None, panel=None, player_key=None, highlight_positions=None, playable_values=None):
+    def draw_player_hand(self, parent_frame, player_id, title=None, position_key=None, panel=None, player_key=None, highlight_positions=None, playable_values=None, certain_values=None, invalid_value=None):
         """Draw a player's hand visualization in the given frame.
         
         Args:
@@ -258,6 +270,8 @@ class BombBusterGUI:
             player_key: The key identifying the player in the panel (e.g. 'caller', 'target')
             highlight_positions: Optional list of position indices to highlight directly
             playable_values: Optional set of values that are playable (for coloring suggestions)
+            certain_values: Optional set of values that are certain (single unrevealed value)
+            invalid_value: Optional value to check - positions that cannot have this value will be greyed out
         """
         # Clear the frame
         for widget in parent_frame.winfo_children():
@@ -293,12 +307,18 @@ class BombBusterGUI:
         for display_col, pos in enumerate(positions):
             pos_beliefs = beliefs[pos]
             
+            # Check if this position can have the invalid_value (for greying out)
+            is_invalid_position = False
+            if invalid_value is not None:
+                is_invalid_position = invalid_value not in pos_beliefs
+            
             # Determine the state of this position
             display_value = ""
             bg_color = "white"
             border_width = 2
             border_color = "black"
             font = ("Arial", 12, "bold")
+            opacity = 1.0  # For visual feedback
             
             # Check if this position is currently selected
             is_selected = False
@@ -319,13 +339,28 @@ class BombBusterGUI:
                 border_width = 4
                 border_color = "#F5A623"  # Orange border for selected
             
+            # Apply greying effect for invalid positions
+            if is_invalid_position:
+                bg_color = "#D3D3D3"  # Light grey background
+                border_color = "#A9A9A9"  # Dark grey border
+            
+            # Check if this position has a certain value (for suggestions)
+            # Only highlight if the position has exactly 1 possible value AND it's in certain_values
+            if certain_values is not None and playable_values is not None:
+                if len(pos_beliefs) == 1:
+                    val = list(pos_beliefs)[0]
+                    if val in certain_values and not is_invalid_position:
+                        border_color = "#9B30FF"  # Purple border for certain calls
+                        border_width = 4
+            
             # Create card frame
             # Use fixed size to ensure all cards are same size regardless of content
-            frame_width = 100
-            frame_height = 120
+            # Reduce size for invalid positions
+            frame_width = 70 if is_invalid_position else 100
+            frame_height = 85 if is_invalid_position else 120
             
             # If in suggestion mode (playable_values set), we might need more space
-            if playable_values is not None:
+            if playable_values is not None and not is_invalid_position:
                 frame_width = 100
                 frame_height = 120
                 
@@ -336,8 +371,9 @@ class BombBusterGUI:
             card_frame.grid(row=0, column=display_col, padx=2)
             
             # Position label below
+            pos_font_size = 7 if is_invalid_position else 8
             pos_label = tk.Label(card_frame, text=f"Pos {pos+1}", 
-                               font=("Arial", 8), bg="#f0f0f0")
+                               font=("Arial", pos_font_size), bg="#f0f0f0")
             pos_label.pack(side=tk.BOTTOM, fill=tk.X)
             
             # Determine content
@@ -351,15 +387,17 @@ class BombBusterGUI:
                 for rev_pid, rev_pos in value_trackers[value].revealed:
                     if rev_pid == player_id and rev_pos == pos:
                         is_revealed = True
-                        bg_color = "#7ED321"  # Green for revealed
+                        bg_color = "#7ED321" if not is_invalid_position else "#A9D3A0"  # Lighter green for invalid
                         break
                 
                 if not is_revealed:
                     # It's certain (deduced)
-                    bg_color = "#F8E71C"  # Yellow for certain
+                    bg_color = "#F8E71C" if not is_invalid_position else "#D8CA7A"  # Lighter yellow for invalid
                 
+                value_font_size = 10 if is_invalid_position else 12
+                value_font = ("Arial", value_font_size, "bold")
                 value_label = tk.Label(card_frame, text=display_value, width=4, height=3,
-                                      bg=bg_color, font=font)
+                                      bg=bg_color, font=value_font)
                 value_label.pack(expand=True, fill=tk.BOTH)
                 
             elif playable_values is not None:
@@ -386,6 +424,7 @@ class BombBusterGUI:
                     row = i // columns
                     col = i % columns
                     
+                    # Color playable values in red
                     fg_color = "red" if val in playable_values else "black"
                     font_weight = "bold" if val in playable_values else "normal"
                     
@@ -419,16 +458,18 @@ class BombBusterGUI:
             elif len(pos_beliefs) < 5:
                 # Uncertain but few possibilities
                 display_value = "\n".join(str(v) for v in sorted(pos_beliefs))
-                font = ("Arial", 10)
+                uncertain_font_size = 8 if is_invalid_position else 10
+                uncertain_font = ("Arial", uncertain_font_size)
                 value_label = tk.Label(card_frame, text=display_value, width=4, height=3,
-                                      bg=bg_color, font=font)
+                                      bg=bg_color, font=uncertain_font)
                 value_label.pack(expand=True, fill=tk.BOTH)
             else:
                 # Many possibilities
                 display_value = f"#{len(pos_beliefs)}"
-                font = ("Arial", 12, "bold")
+                many_font_size = 10 if is_invalid_position else 12
+                many_font = ("Arial", many_font_size, "bold")
                 value_label = tk.Label(card_frame, text=display_value, width=4, height=3,
-                                      bg=bg_color, font=font)
+                                      bg=bg_color, font=many_font)
                 value_label.pack(expand=True, fill=tk.BOTH)
 
             # Bind click events if panel is provided
@@ -496,6 +537,10 @@ class BombBusterGUI:
                 self.not_present.append(action_data)
             elif action_type == "has_value":
                 self.has_values.append(action_data)
+            elif action_type == "copy_count_signal":
+                self.copy_count_signals.append(action_data)
+            elif action_type == "adjacent_signal":
+                self.adjacent_signals.append(action_data)
             
             # Refresh game
             self.save_and_refresh()
@@ -626,7 +671,13 @@ class ActionPanel(tk.Frame):
             frame = getattr(self, f'{key}_hand_frame')
             # Determine the position key for highlighting selected positions
             position_key = self.get_position_key_for_player(key)
-            self.app.draw_player_hand(frame, player_id, position_key=position_key, panel=self, player_key=key)
+            
+            # For CallActionPanel, pass the selected value to grey out invalid positions
+            invalid_value = None
+            if isinstance(self, CallActionPanel) and 'value' in self.selections:
+                invalid_value = self.selections['value']
+            
+            self.app.draw_player_hand(frame, player_id, position_key=position_key, panel=self, player_key=key, invalid_value=invalid_value)
     
     def get_position_key_for_player(self, player_key):
         """Get the corresponding position key for a player selection.
@@ -653,12 +704,30 @@ class ActionPanel(tk.Frame):
                 if player_key in self.selections and hasattr(self, f'{player_key}_hand_frame'):
                     frame = getattr(self, f'{player_key}_hand_frame')
                     position_key = self.get_position_key_for_player(player_key)
+                    
+                    # For CallActionPanel, pass the selected value to grey out invalid positions
+                    invalid_value = None
+                    if isinstance(self, CallActionPanel) and 'value' in self.selections:
+                        invalid_value = self.selections['value']
+                    
                     self.app.draw_player_hand(frame, self.selections[player_key], 
-                                             position_key=position_key, panel=self, player_key=player_key)
+                                             position_key=position_key, panel=self, player_key=player_key, invalid_value=invalid_value)
     
     def select_value(self, key, value):
         """Handle value button selection."""
         self.selections[key] = value
+        
+        # For CallActionPanel, update hand visualizations to show valid/invalid positions
+        if isinstance(self, CallActionPanel):
+            self._update_hands_for_selected_value()
+    
+    def _update_hands_for_selected_value(self):
+        """Update hand displays when a value is selected (CallActionPanel only)."""
+        # Redraw hands for caller and target if they're selected
+        if 'caller' in self.selections:
+            self.select_player('caller', self.selections['caller'])
+        if 'target' in self.selections:
+            self.select_player('target', self.selections['target'])
     
     def clear_selections(self):
         """Clear all selections."""
@@ -683,6 +752,9 @@ class CallActionPanel(ActionPanel):
         
         tk.Label(self, text="CALL ACTION", font=("Arial", 14, "bold"), fg="#333333").pack(pady=10)
         
+        # Value selection - MOVED TO TOP
+        self.create_value_buttons(self, "Value:", "value")
+        
         self.create_player_buttons(self, "Caller:", "caller")
         
         # Hand viewer for caller
@@ -700,9 +772,6 @@ class CallActionPanel(ActionPanel):
         
         # Position selection buttons
         self.init_position_var("position")
-        
-        # Value selection
-        self.create_value_buttons(self, "Value:", "value")
         
         # Result
         result_frame = tk.Frame(self, bg="#E8F5E9", padx=10, pady=10, relief=tk.GROOVE, borderwidth=1)
@@ -1041,6 +1110,220 @@ class SignalActionPanel(ActionPanel):
         self.action_type_var.set("signal")
 
 
+class AdvancedSignalsPanel(ActionPanel):
+    """Panel for advanced signal actions (copy count and adjacent)."""
+    
+    def __init__(self, parent, app):
+        super().__init__(parent, app)
+        self.hand_viewer_frame = True
+        
+        tk.Label(self, text="ADVANCED SIGNALS", font=("Arial", 14, "bold"), fg="#333333").pack(pady=10)
+        
+        # Signal type selector
+        type_frame = tk.Frame(self, bg="#E3F2FD", padx=10, pady=10, relief=tk.GROOVE, borderwidth=2)
+        type_frame.pack(fill=tk.X, pady=10, padx=5)
+        tk.Label(type_frame, text="Signal Type:", width=12, anchor=tk.W, bg="#E3F2FD", font=("Arial", 10, "bold")).pack(side=tk.LEFT)
+        
+        self.signal_type_var = tk.StringVar(value="copy_count")
+        tk.Radiobutton(type_frame, text="MULTIPLIERS (x1, x2, x3)", variable=self.signal_type_var, 
+                      value="copy_count", bg="#E3F2FD", font=("Arial", 10),
+                      command=self.on_signal_type_changed).pack(side=tk.LEFT, padx=10)
+        tk.Radiobutton(type_frame, text="EQUAL", variable=self.signal_type_var, 
+                      value="equal", bg="#E3F2FD", font=("Arial", 10),
+                      command=self.on_signal_type_changed).pack(side=tk.LEFT, padx=10)
+        tk.Radiobutton(type_frame, text="DIFFERENT", variable=self.signal_type_var, 
+                      value="different", bg="#E3F2FD", font=("Arial", 10),
+                      command=self.on_signal_type_changed).pack(side=tk.LEFT, padx=10)
+        
+        # Player selection
+        self.create_player_buttons(self, "Player:", "player")
+        
+        # Hand viewer
+        self.player_hand_frame = tk.Frame(self)
+        self.player_hand_frame.pack(fill=tk.X, pady=5, padx=10)
+        
+        # Copy count selection (only for multipliers)
+        self.copy_count_frame = tk.Frame(self, bg="#FFF9C4", padx=10, pady=10, relief=tk.GROOVE, borderwidth=1)
+        self.copy_count_frame.pack(fill=tk.X, pady=10, padx=5)
+        tk.Label(self.copy_count_frame, text="Copy Count:", width=12, anchor=tk.W, bg="#FFF9C4", font=("Arial", 10, "bold")).pack(side=tk.LEFT)
+        
+        self.copy_count_var = tk.IntVar(value=1)
+        for count in [1, 2, 3]:
+            tk.Radiobutton(self.copy_count_frame, text=f"x{count}", variable=self.copy_count_var, 
+                          value=count, bg="#FFF9C4", font=("Arial", 10)).pack(side=tk.LEFT, padx=10)
+        
+        # Info label
+        self.info_label = tk.Label(self, text="", font=("Arial", 9, "italic"), fg="#666666")
+        self.info_label.pack(pady=5)
+        
+        # Position selection variables (initialized but no buttons created)
+        self.init_position_var("position1")
+        self.init_position_var("position2")
+        
+        # Buttons
+        button_frame = tk.Frame(self)
+        button_frame.pack(pady=20)
+        tk.Button(button_frame, text="ADD SIGNAL", command=self.add_advanced_signal,
+                 bg="#4CAF50", fg="white", padx=30, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
+        tk.Button(button_frame, text="CLEAR", command=self.clear,
+                 bg="#F44336", fg="white", padx=20, pady=10, font=("Arial", 11, "bold")).pack(side=tk.LEFT, padx=10)
+        
+        # Initialize UI state
+        self.on_signal_type_changed()
+    
+    def get_position_key_for_player(self, player_key):
+        """Override to handle multiple position selections for adjacent signals."""
+        if player_key == 'player':
+            # For adjacent signals, we need to track which position we're selecting
+            # Always allow clicking - we'll manage position1/position2 in handle_hand_click
+            return 'position1'  # Default, will be overridden in handle_hand_click
+        return None
+    
+    def handle_hand_click(self, player_key, position):
+        """Handle click on a hand card - supports selecting position1 and position2."""
+        if player_key != 'player':
+            return
+        
+        signal_type = self.signal_type_var.get()
+        
+        if signal_type == "copy_count":
+            # Single position selection
+            self.vars["position1"].set(position)
+            self.select_position("position1", position)
+        else:
+            # Adjacent signal - two positions needed
+            if "position1" not in self.selections:
+                # First click - select position1
+                self.vars["position1"].set(position)
+                self.select_position("position1", position)
+            elif "position2" not in self.selections:
+                # Second click - select position2
+                self.vars["position2"].set(position)
+                self.select_position("position2", position)
+            else:
+                # Both already selected, reset to first position
+                self.selections.pop("position2", None)
+                self.vars["position2"].set(-1)
+                self.vars["position1"].set(position)
+                self.select_position("position1", position)
+    
+    def select_position(self, key, position):
+        """Handle position selection."""
+        self.selections[key] = position
+        
+        # Redraw hand to show selections
+        if 'player' in self.selections:
+            frame = self.player_hand_frame
+            highlight_positions = self._get_highlight_positions()
+            self.app.draw_player_hand(frame, self.selections['player'], 
+                                     position_key=None, panel=self, player_key='player',
+                                     highlight_positions=highlight_positions)
+    
+    def _get_highlight_positions(self):
+        """Get list of positions to highlight in the hand."""
+        positions = []
+        if "position1" in self.selections:
+            positions.append(self.selections["position1"])
+        if "position2" in self.selections:
+            positions.append(self.selections["position2"])
+        return positions
+    
+    def select_player(self, key, player_id):
+        """Override to use custom highlighting."""
+        self.selections[key] = player_id
+        
+        if key == 'player':
+            frame = self.player_hand_frame
+            highlight_positions = self._get_highlight_positions()
+            self.app.draw_player_hand(frame, player_id, 
+                                     position_key=None, panel=self, player_key=key,
+                                     highlight_positions=highlight_positions)
+    
+    def on_signal_type_changed(self):
+        """Update UI based on selected signal type."""
+        signal_type = self.signal_type_var.get()
+        
+        # Clear position selections when type changes
+        self.selections.pop("position1", None)
+        self.selections.pop("position2", None)
+        self.vars["position1"].set(-1)
+        self.vars["position2"].set(-1)
+        
+        if signal_type == "copy_count":
+            # Single position selection
+            self.copy_count_frame.pack(fill=tk.X, pady=10, padx=5)
+            self.info_label.config(text="ℹ️ Click ONE position on the hand above, then select copy count (x1, x2, x3)")
+        else:
+            # Two adjacent position selection
+            self.copy_count_frame.pack_forget()
+            
+            if signal_type == "equal":
+                self.info_label.config(text="ℹ️ Click TWO ADJACENT positions on the hand above (they have the SAME value)")
+            else:
+                self.info_label.config(text="ℹ️ Click TWO ADJACENT positions on the hand above (they have DIFFERENT values)")
+        
+        # Redraw hand if player is selected
+        if 'player' in self.selections:
+            frame = self.player_hand_frame
+            highlight_positions = self._get_highlight_positions()
+            self.app.draw_player_hand(frame, self.selections['player'], 
+                                     position_key=None, panel=self, player_key='player',
+                                     highlight_positions=highlight_positions)
+    
+    def add_advanced_signal(self):
+        """Add the advanced signal action."""
+        signal_type = self.signal_type_var.get()
+        
+        if "player" not in self.selections:
+            messagebox.showwarning("Incomplete", "Please select a player")
+            return
+        
+        player_id = self.selections["player"]
+        player_name = self.app.player_names[player_id]
+        
+        if signal_type == "copy_count":
+            # Copy count signal
+            if "position1" not in self.selections:
+                messagebox.showwarning("Incomplete", "Please select a position")
+                return
+            
+            position = self.selections["position1"]  # Already 0-indexed
+            copy_count = self.copy_count_var.get()
+            
+            # Store as tuple: (player_id, position_0indexed, copy_count)
+            action = (player_id, position, copy_count)
+            self.app.add_action("copy_count_signal", action)
+            self.clear()
+        
+        else:
+            # Adjacent signal (equal or different)
+            if "position1" not in self.selections or "position2" not in self.selections:
+                messagebox.showwarning("Incomplete", "Please select both positions")
+                return
+            
+            pos1 = self.selections["position1"]
+            pos2 = self.selections["position2"]
+            
+            # Validate adjacent
+            if abs(pos1 - pos2) != 1:
+                messagebox.showwarning("Invalid", "Positions must be adjacent (differ by 1)")
+                return
+            
+            is_equal = (signal_type == "equal")
+            
+            # Store as tuple: (player_id, pos1_0indexed, pos2_0indexed, is_equal)
+            action = (player_id, pos1, pos2, is_equal)
+            self.app.add_action("adjacent_signal", action)
+            self.clear()
+    
+    def clear(self):
+        """Clear all selections."""
+        self.clear_selections()
+        self.signal_type_var.set("copy_count")
+        self.copy_count_var.set(1)
+        self.on_signal_type_changed()
+
+
 class NotPresentActionPanel(ActionPanel):
     """Panel for not present actions."""
     
@@ -1252,6 +1535,8 @@ class SuggesterPanel(tk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent)
         self.app = app
+        self.selected_filter_value = None  # Track selected value filter
+        self.value_filter_buttons = {}  # Store value filter buttons
         
         # Header
         header_frame = tk.Frame(self, bg="#FAFAFA", relief=tk.RIDGE, borderwidth=2)
@@ -1263,9 +1548,57 @@ class SuggesterPanel(tk.Frame):
         tk.Button(header_frame, text="REFRESH", command=self.refresh,
                  bg="#FFC107", fg="black", padx=10, pady=5, font=("Arial", 10, "bold")).pack(pady=5)
         
+        # Value filter section
+        filter_frame = tk.Frame(self, bg="#F3E5F5", padx=5, pady=5, relief=tk.GROOVE, borderwidth=1)
+        filter_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        tk.Label(filter_frame, text="Filter by Value:", anchor=tk.W, bg="#F3E5F5", font=("Arial", 10, "bold")).pack()
+        
+        button_container = tk.Frame(filter_frame, bg="#F3E5F5")
+        button_container.pack(fill=tk.X, pady=(5, 0))
+        
+        # Create value filter buttons
+        for value in self.app.config.wire_values:
+            btn = tk.Button(button_container, text=str(value), width=5,
+                           bg="white", font=("Arial", 9, "bold"),
+                           command=lambda v=value: self.toggle_value_filter(v))
+            btn.pack(side=tk.LEFT, padx=2)
+            self.value_filter_buttons[value] = btn
+        
+        # Clear filter button
+        tk.Button(button_container, text="CLEAR FILTER", 
+                 command=self.clear_value_filter,
+                 bg="#E0E0E0", font=("Arial", 9, "bold"), padx=10).pack(side=tk.LEFT, padx=10)
+        
         # Content container (no internal scrollbar, relies on main window scroll)
         self.content_frame = tk.Frame(self)
         self.content_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+    def toggle_value_filter(self, value):
+        """Toggle value filter selection."""
+        if self.selected_filter_value == value:
+            # Deselect if already selected
+            self.clear_value_filter()
+        else:
+            # Select new value
+            self.selected_filter_value = value
+            # Update button styles
+            for v, btn in self.value_filter_buttons.items():
+                if v == value:
+                    btn.config(bg="#BD10E0", fg="white", relief=tk.SUNKEN)
+                else:
+                    btn.config(bg="white", fg="black", relief=tk.RAISED)
+            # Refresh display
+            self.refresh()
+    
+    def clear_value_filter(self):
+        """Clear the value filter."""
+        self.selected_filter_value = None
+        # Reset all button styles
+        for btn in self.value_filter_buttons.values():
+            btn.config(bg="white", fg="black", relief=tk.RAISED)
+        # Refresh display
+        self.refresh()
 
     def refresh(self):
         """Refresh the suggestions list."""
@@ -1276,6 +1609,9 @@ class SuggesterPanel(tk.Frame):
         if not self.app.my_player or not self.app.my_player.belief_system:
             return
             
+        # Manually apply filters before generating suggestions
+        self.app.my_player.belief_system.apply_filters()
+
         # Initialize statistics
         # IMPORTANT: Use the player's CURRENT wire from the game object, not the initial self.app.my_wire
         # The player's wire changes after swaps!
@@ -1312,15 +1648,220 @@ class SuggesterPanel(tk.Frame):
             
             suggested_positions = [p for p, _, _ in suggestions_by_player[target_id]]
             
-            # Extract playable values for this player
+            # Extract playable values for this player, categorized by certainty
             playable_values = set()
-            for _, val, _ in suggestions_by_player[target_id]:
+            certain_values = set()
+            for _, val, uncertainty in suggestions_by_player[target_id]:
                 playable_values.add(val)
+                if uncertainty == 1:  # Certain calls have uncertainty=1 (only 1 possible value)
+                    certain_values.add(val)
+            
+            # Apply filter if a value is selected
+            invalid_value = self.selected_filter_value if self.selected_filter_value is not None else None
                 
             self.app.draw_player_hand(hand_frame, target_id, title="", 
                                      highlight_positions=suggested_positions,
-                                     playable_values=playable_values)
+                                     playable_values=playable_values,
+                                     certain_values=certain_values,
+                                     invalid_value=invalid_value)
+
+class EntropyPanel(tk.Frame):
+    """Panel for viewing entropy statistics and information theory metrics."""
+    
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+        
+        # Header
+        header_frame = tk.Frame(self, bg="#E8F5E9", relief=tk.RIDGE, borderwidth=2)
+        header_frame.pack(fill=tk.X, padx=5, pady=5)
+        tk.Label(header_frame, text="ENTROPY & INFORMATION ANALYSIS", font=("Arial", 14, "bold"), 
+                fg="#2E7D32", bg="#E8F5E9").pack(pady=10)
+        
+        # Refresh button
+        tk.Button(header_frame, text="REFRESH", command=self.refresh,
+                 bg="#FFC107", fg="black", padx=10, pady=5, font=("Arial", 10, "bold")).pack(pady=5)
+        
+        # Info text
+        info_frame = tk.Frame(header_frame, bg="#E8F5E9")
+        info_frame.pack(fill=tk.X, padx=10, pady=5)
+        tk.Label(info_frame, text="ℹ️ Entropy measures uncertainty: Higher = More uncertain, 0 = Completely certain", 
+                font=("Arial", 9, "italic"), fg="#555555", bg="#E8F5E9").pack()
+        
+        # Main content container
+        self.content_frame = tk.Frame(self)
+        self.content_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+    def refresh(self):
+        """Refresh the entropy display."""
+        # Clear existing content
+        for widget in self.content_frame.winfo_children():
+            widget.destroy()
+            
+        if not self.app.my_player or not self.app.my_player.belief_system:
+            tk.Label(self.content_frame, text="No game data available", 
+                    font=("Arial", 12), fg="#666666").pack(pady=20)
+            return
+            
+        # Apply filters first
+        self.app.my_player.belief_system.apply_filters()
+        
+        # Initialize statistics
+        current_wire = self.app.my_player.get_wire()
+        stats = GameStatistics(self.app.my_player.belief_system, self.app.config, current_wire)
+        
+        # Get system-wide statistics
+        sys_stats = stats.get_system_statistics()
+        
+        # System Overview Section
+        self._create_system_overview(sys_stats)
+        
+        # Per-Player Statistics Section
+        self._create_player_statistics(stats, sys_stats)
+        
+    def _create_system_overview(self, sys_stats):
+        """Create the system-wide overview section."""
+        system_frame = tk.Frame(self.content_frame, relief=tk.GROOVE, borderwidth=2, padx=15, pady=15, bg="#BBDEFB")
+        system_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        tk.Label(system_frame, text="📊 SYSTEM OVERVIEW", font=("Arial", 13, "bold"), 
+                bg="#BBDEFB", fg="#0D47A1").pack(anchor="w", pady=(0, 10))
+        
+        # Create grid for system stats
+        grid_frame = tk.Frame(system_frame, bg="#BBDEFB")
+        grid_frame.pack(fill=tk.X)
+        
+        # Row 1: Total Entropy
+        tk.Label(grid_frame, text="Total System Entropy:", font=("Arial", 11, "bold"), 
+                bg="#BBDEFB", anchor="w").grid(row=0, column=0, sticky="w", padx=5, pady=3)
+        tk.Label(grid_frame, text=f"{sys_stats['total_entropy']:.2f} bits", 
+                font=("Arial", 11), bg="#BBDEFB", anchor="e").grid(row=0, column=1, sticky="e", padx=5, pady=3)
+        
+        # Row 2: Average Player Entropy
+        tk.Label(grid_frame, text="Average Player Entropy:", font=("Arial", 11, "bold"), 
+                bg="#BBDEFB", anchor="w").grid(row=1, column=0, sticky="w", padx=5, pady=3)
+        tk.Label(grid_frame, text=f"{sys_stats['avg_player_entropy']:.2f} bits", 
+                font=("Arial", 11), bg="#BBDEFB", anchor="e").grid(row=1, column=1, sticky="e", padx=5, pady=3)
+        
+        # Row 3: Overall Completion
+        tk.Label(grid_frame, text="Overall Completion:", font=("Arial", 11, "bold"), 
+                bg="#BBDEFB", anchor="w").grid(row=2, column=0, sticky="w", padx=5, pady=3)
+        completion_color = self._get_completion_color(sys_stats['completion_percent'])
+        tk.Label(grid_frame, text=f"{sys_stats['completion_percent']:.1f}%", 
+                font=("Arial", 11, "bold"), bg="#BBDEFB", fg=completion_color, anchor="e").grid(row=2, column=1, sticky="e", padx=5, pady=3)
+        
+        # Row 4: Most Uncertain Player
+        most_uncertain_name = self.app.player_names.get(sys_stats['most_uncertain_player'], 
+                                                        f"Player {sys_stats['most_uncertain_player']}")
+        tk.Label(grid_frame, text="Most Uncertain Player:", font=("Arial", 11, "bold"), 
+                bg="#BBDEFB", anchor="w").grid(row=3, column=0, sticky="w", padx=5, pady=3)
+        tk.Label(grid_frame, text=f"{most_uncertain_name} ({sys_stats['player_entropies'][sys_stats['most_uncertain_player']]:.2f} bits)", 
+                font=("Arial", 11), bg="#BBDEFB", fg="#D32F2F", anchor="e").grid(row=3, column=1, sticky="e", padx=5, pady=3)
+        
+        # Configure grid columns
+        grid_frame.columnconfigure(0, weight=1)
+        grid_frame.columnconfigure(1, weight=1)
+    
+    def _create_player_statistics(self, stats, sys_stats):
+        """Create per-player statistics section."""
+        players_frame = tk.Frame(self.content_frame, bg="#FAFAFA")
+        players_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        tk.Label(players_frame, text="📈 PER-PLAYER STATISTICS", font=("Arial", 13, "bold"), 
+                bg="#FAFAFA", fg="#1565C0").pack(anchor="w", pady=(0, 10))
+        
+        # Create a frame for each player
+        for player_id in range(self.app.config.n_players):
+            player_stats = stats.get_player_statistics(player_id)
+            player_name = self.app.player_names.get(player_id, f"Player {player_id}")
+            
+            # Different styling for "me"
+            is_me = (player_id == self.app.my_player_id)
+            bg_color = "#FFF9C4" if is_me else "#FFFFFF"
+            border_color = "#F57C00" if is_me else "#BDBDBD"
+            
+            player_frame = tk.Frame(players_frame, relief=tk.GROOVE, borderwidth=2, 
+                                   padx=12, pady=12, bg=bg_color, highlightbackground=border_color)
+            player_frame.pack(fill=tk.X, pady=5)
+            
+            # Player name header
+            header_text = f"👤 {player_name}" if is_me else f"{player_name}"
+            tk.Label(player_frame, text=header_text, font=("Arial", 12, "bold"), 
+                    bg=bg_color).pack(anchor="w", pady=(0, 8))
+            
+            # Create grid for player stats
+            grid_frame = tk.Frame(player_frame, bg=bg_color)
+            grid_frame.pack(fill=tk.X)
+            
+            # Row 0: Entropy
+            tk.Label(grid_frame, text="Entropy:", font=("Arial", 10), 
+                    bg=bg_color, anchor="w").grid(row=0, column=0, sticky="w", padx=3, pady=2)
+            entropy_color = self._get_entropy_color(player_stats['entropy_normalized'])
+            tk.Label(grid_frame, text=f"{player_stats['entropy']:.2f} bits", 
+                    font=("Arial", 10, "bold"), bg=bg_color, fg=entropy_color, anchor="e").grid(row=0, column=1, sticky="e", padx=3, pady=2)
+            
+            # Row 1: Normalized Entropy
+            tk.Label(grid_frame, text="Normalized Entropy:", font=("Arial", 10), 
+                    bg=bg_color, anchor="w").grid(row=1, column=0, sticky="w", padx=3, pady=2)
+            tk.Label(grid_frame, text=f"{player_stats['entropy_normalized']:.1%}", 
+                    font=("Arial", 10), bg=bg_color, anchor="e").grid(row=1, column=1, sticky="e", padx=3, pady=2)
+            
+            # Row 2: Progress bar for completion
+            tk.Label(grid_frame, text="Progress:", font=("Arial", 10), 
+                    bg=bg_color, anchor="w").grid(row=2, column=0, sticky="w", padx=3, pady=2)
+            progress_text = f"{player_stats['certain_count']}/{self.app.config.wires_per_player} certain ({player_stats['progress_percent']:.1f}%)"
+            progress_color = self._get_completion_color(player_stats['progress_percent'])
+            tk.Label(grid_frame, text=progress_text, 
+                    font=("Arial", 10, "bold"), bg=bg_color, fg=progress_color, anchor="e").grid(row=2, column=1, sticky="e", padx=3, pady=2)
+            
+            # Row 3: Average Possibilities
+            tk.Label(grid_frame, text="Avg. Possibilities:", font=("Arial", 10), 
+                    bg=bg_color, anchor="w").grid(row=3, column=0, sticky="w", padx=3, pady=2)
+            tk.Label(grid_frame, text=f"{player_stats['avg_possibilities']:.2f} per position", 
+                    font=("Arial", 10), bg=bg_color, anchor="e").grid(row=3, column=1, sticky="e", padx=3, pady=2)
+            
+            # Row 4: Uncertain Positions
+            tk.Label(grid_frame, text="Uncertain Positions:", font=("Arial", 10), 
+                    bg=bg_color, anchor="w").grid(row=4, column=0, sticky="w", padx=3, pady=2)
+            tk.Label(grid_frame, text=f"{player_stats['uncertain_count']}", 
+                    font=("Arial", 10), bg=bg_color, anchor="e").grid(row=4, column=1, sticky="e", padx=3, pady=2)
+            
+            # Configure grid columns
+            grid_frame.columnconfigure(0, weight=1)
+            grid_frame.columnconfigure(1, weight=1)
+            
+            # Visual progress bar
+            progress_bar_frame = tk.Frame(player_frame, bg=bg_color, height=25)
+            progress_bar_frame.pack(fill=tk.X, pady=(8, 0))
+            progress_bar_frame.pack_propagate(False)
+            
+            bar_bg = tk.Frame(progress_bar_frame, bg="#E0E0E0", relief=tk.SUNKEN, borderwidth=1)
+            bar_bg.pack(fill=tk.BOTH, expand=True)
+            
+            bar_fill_width = player_stats['progress_percent']
+            if bar_fill_width > 0:
+                bar_fill = tk.Frame(bar_bg, bg=progress_color, width=int(bar_fill_width * 3))
+                bar_fill.place(x=0, y=0, relheight=1.0, relwidth=bar_fill_width/100)
+    
+    def _get_entropy_color(self, normalized_entropy):
+        """Get color based on normalized entropy level."""
+        if normalized_entropy < 0.2:
+            return "#2E7D32"  # Green - low uncertainty
+        elif normalized_entropy < 0.5:
+            return "#F57C00"  # Orange - medium uncertainty
+        else:
+            return "#D32F2F"  # Red - high uncertainty
+    
+    def _get_completion_color(self, completion_percent):
+        """Get color based on completion percentage."""
+        if completion_percent >= 80:
+            return "#2E7D32"  # Green - high completion
+        elif completion_percent >= 50:
+            return "#F57C00"  # Orange - medium completion
+        else:
+            return "#D32F2F"  # Red - low completion
 
 if __name__ == "__main__":
     app = BombBusterGUI()
     app.run()
+

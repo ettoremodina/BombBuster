@@ -4,7 +4,7 @@ This is the central orchestrator for BombBuster gameplay.
 """
 
 from typing import List, Optional, Dict, Union
-from src.data_structures import CallRecord, DoubleRevealRecord, SwapRecord, SignalRecord, NotPresentRecord, GameObservation
+from src.data_structures import CallRecord, DoubleRevealRecord, SwapRecord, SignalRecord, NotPresentRecord, SignalCopyCountRecord, SignalAdjacentRecord, GameObservation
 from src.player import Player
 from config.game_config import GameConfig
 
@@ -382,6 +382,83 @@ class Game:
         
         return not_present_record
     
+    def signal_copy_count(self, player_id: int, position: int, copy_count: int) -> SignalCopyCountRecord:
+        """
+        Process a signal where a player announces the number of copies of the value at a position.
+        The player signals that the value at the given position has 1, 2, or 3 copies in the deck.
+        
+        Args:
+            player_id: ID of the player making the signal
+            position: Wire position being signaled (0-indexed)
+            copy_count: Number of copies (1, 2, or 3)
+        
+        Returns:
+            SignalCopyCountRecord with the result
+        
+        Raises:
+            ValueError: If the signal is invalid
+        """
+        # Validate the signal
+        self._validate_copy_count_signal(player_id, position, copy_count)
+        
+        # Create signal record
+        signal_record = SignalCopyCountRecord(
+            player_id=player_id,
+            position=position,
+            copy_count=copy_count,
+            turn_number=self.current_turn
+        )
+        
+        # Broadcast to all players
+        self._broadcast_copy_count(signal_record)
+        
+        # Check win condition
+        self._check_win_condition()
+        
+        # Increment turn
+        self.current_turn += 1
+        
+        return signal_record
+    
+    def signal_adjacent(self, player_id: int, position1: int, position2: int, is_equal: bool) -> SignalAdjacentRecord:
+        """
+        Process a signal where a player announces that two adjacent positions have the same or different values.
+        
+        Args:
+            player_id: ID of the player making the signal
+            position1: First wire position (0-indexed)
+            position2: Second wire position (0-indexed)
+            is_equal: True if values are equal, False if different
+        
+        Returns:
+            SignalAdjacentRecord with the result
+        
+        Raises:
+            ValueError: If the signal is invalid
+        """
+        # Validate the signal
+        self._validate_adjacent_signal(player_id, position1, position2, is_equal)
+        
+        # Create signal record
+        signal_record = SignalAdjacentRecord(
+            player_id=player_id,
+            position1=position1,
+            position2=position2,
+            is_equal=is_equal,
+            turn_number=self.current_turn
+        )
+        
+        # Broadcast to all players
+        self._broadcast_adjacent(signal_record)
+        
+        # Check win condition
+        self._check_win_condition()
+        
+        # Increment turn
+        self.current_turn += 1
+        
+        return signal_record
+    
     def announce_has_value(self, player_id: int, value: Union[int, float]):
         """
         Process an announcement where a player declares they have a specific value.
@@ -484,6 +561,82 @@ class Game:
                 if value in player.wire:
                     raise ValueError(f"Player {player_id} cannot announce not having value {value} - they possess it")
     
+    def _validate_copy_count_signal(self, player_id: int, position: int, copy_count: int):
+        """
+        Validate that a copy count signal is legal according to game rules.
+        
+        Args:
+            player_id: ID of the player making the signal
+            position: Wire position being signaled
+            copy_count: Number of copies being signaled (1, 2, or 3)
+        
+        Raises:
+            ValueError: If the signal violates game rules
+        """
+        # Check if game is over
+        if self.game_over:
+            raise ValueError("Game is already over")
+        
+        # Check if player ID is valid
+        if player_id < 0 or player_id >= len(self.players):
+            raise ValueError(f"Invalid player_id: {player_id}")
+        
+        # Check if position is valid
+        if position < 0 or position >= self.config.wires_per_player:
+            raise ValueError(f"Invalid position: {position}. Must be in [0, {self.config.wires_per_player-1}]")
+        
+        # Check if copy_count is valid
+        if copy_count not in [1, 2, 3]:
+            raise ValueError(f"Invalid copy_count: {copy_count}. Must be 1, 2, or 3")
+        
+        # When not in IRL mode, validate the actual copy count
+        if not self.config.playing_irl:
+            player = self.players[player_id]
+            actual_value = player.wire[position]
+            actual_count = self.config.wire_distribution[actual_value]
+            if actual_count != copy_count:
+                raise ValueError(f"Player {player_id} signaled wrong copy count at position {position}: "
+                               f"value {actual_value} has {actual_count} copies, not {copy_count}")
+    
+    def _validate_adjacent_signal(self, player_id: int, position1: int, position2: int, is_equal: bool):
+        """
+        Validate that an adjacent signal is legal according to game rules.
+        
+        Args:
+            player_id: ID of the player making the signal
+            position1: First wire position
+            position2: Second wire position
+            is_equal: Whether the values are equal
+        
+        Raises:
+            ValueError: If the signal violates game rules
+        """
+        # Check if game is over
+        if self.game_over:
+            raise ValueError("Game is already over")
+        
+        # Check if player ID is valid
+        if player_id < 0 or player_id >= len(self.players):
+            raise ValueError(f"Invalid player_id: {player_id}")
+        
+        # Check if positions are valid
+        if position1 < 0 or position1 >= self.config.wires_per_player:
+            raise ValueError(f"Invalid position1: {position1}. Must be in [0, {self.config.wires_per_player-1}]")
+        if position2 < 0 or position2 >= self.config.wires_per_player:
+            raise ValueError(f"Invalid position2: {position2}. Must be in [0, {self.config.wires_per_player-1}]")
+        
+        # Check if positions are adjacent
+        if abs(position1 - position2) != 1:
+            raise ValueError(f"Positions {position1} and {position2} are not adjacent")
+        
+        # When not in IRL mode, validate the actual relationship
+        if not self.config.playing_irl:
+            player = self.players[player_id]
+            actual_equal = (player.wire[position1] == player.wire[position2])
+            if actual_equal != is_equal:
+                raise ValueError(f"Player {player_id} signaled wrong relationship at positions {position1} and {position2}: "
+                               f"values are {'equal' if actual_equal else 'different'}, not {'equal' if is_equal else 'different'}")
+    
     def _broadcast_not_present(self, not_present_record: NotPresentRecord):
         """
         Broadcast a not-present announcement to all players so they can update their beliefs.
@@ -495,6 +648,30 @@ class Game:
         for player in self.players:
             if player.belief_system is not None:
                 player.belief_system.process_not_present(not_present_record)
+    
+    def _broadcast_copy_count(self, signal_record: SignalCopyCountRecord):
+        """
+        Broadcast a copy count signal to all players so they can update their beliefs.
+        
+        Args:
+            signal_record: The copy count signal to broadcast
+        """
+        # Each player's belief system processes the copy count signal
+        for player in self.players:
+            if player.belief_system is not None:
+                player.belief_system.process_copy_count_signal(signal_record)
+    
+    def _broadcast_adjacent(self, signal_record: SignalAdjacentRecord):
+        """
+        Broadcast an adjacent signal to all players so they can update their beliefs.
+        
+        Args:
+            signal_record: The adjacent signal to broadcast
+        """
+        # Each player's belief system processes the adjacent signal
+        for player in self.players:
+            if player.belief_system is not None:
+                player.belief_system.process_adjacent_signal(signal_record)
     
     def _validate_double_reveal(self, player_id: int, value: Union[int, float], position1: int, position2: int):
         """

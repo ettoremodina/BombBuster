@@ -16,6 +16,11 @@
       "Brini",
       8,
       7
+    ],
+    [
+      "Gorgo",
+      7,
+      8
     ]
   ],
   "reveals": [
@@ -23,6 +28,11 @@
       "Brini",
       1,
       1
+    ],
+    [
+      "Brini",
+      3,
+      4
     ]
   ],
   "not_present": [
@@ -31,5 +41,29 @@
       7
     ]
   ],
-  "has_values": []
+  "has_values": [
+    [
+      "Brini",
+      2
+    ],
+    [
+      "Andre",
+      12
+    ]
+  ],
+  "copy_count_signals": [],
+  "adjacent_signals": [
+    [
+      1,
+      6,
+      7,
+      true
+    ],
+    [
+      1,
+      6,
+      5,
+      false
+    ]
+  ]
 }
