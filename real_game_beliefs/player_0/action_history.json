@@ -7,6 +7,14 @@
       1,
       true,
       1
+    ],
+    [
+      "Ettore",
+      "Brini",
+      5,
+      4,
+      true,
+      3
     ]
   ],
   "double_reveals": [],
@@ -64,6 +72,12 @@
       6,
       5,
       false
+    ],
+    [
+      3,
+      7,
+      6,
+      true
     ]
   ]
 }

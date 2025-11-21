@@ -1,18 +1,5 @@
 # TO DO
 
-I have a new feature to implement
-a player can signal a card saying that he has 1,2 or 3 copies of that value. to be clear: it will signal the position, the real value in that position will have 1,2 or 3 copies in the deck. (it will use a x1,x2,x3 notation for values with multiple copies)
-right now there is no way to signal that information, how can we implement it? And I know that with the global belief model it is not possible to represent that information and use it to filter values
-
-another action that is possible for a player is to signal that two aadjecient wires have the same value or different values, add this too
-To be clear: the player will signal that position x and position x+1 (or x-1) have the same value or different values
-
-
-## add back stats
-add a new tab in the GUI with the information on entropy
-You can find all related methods already implemented in #file:statistics.py
-Make a nice looking tab, with per player and system information
-
 ## automatic playing
 - check if the game can play automatically and do some simulations
 

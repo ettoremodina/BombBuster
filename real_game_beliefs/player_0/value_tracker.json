@@ -64,15 +64,19 @@
     "uncertain": "0/1"
   },
   "4": {
-    "revealed": [],
-    "certain": [
+    "revealed": [
+      [
+        "Brini",
+        4
+      ],
       [
         "Ettore",
         2
       ]
     ],
+    "certain": [],
     "called": [],
-    "uncertain": "3/4"
+    "uncertain": "2/4"
   },
   "5": {
     "revealed": [],

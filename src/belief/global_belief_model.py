@@ -3,6 +3,17 @@ from src.belief.belief_model import BeliefModel
 from src.data_structures import GameObservation, SignalCopyCountRecord, SignalAdjacentRecord
 from config.game_config import GameConfig
 import collections
+from concurrent.futures import ProcessPoolExecutor
+from src.belief.global_belief_utils import generate_signatures_worker, filter_signatures_worker
+
+# Global executor to avoid overhead of creating processes repeatedly
+_executor = None
+
+def get_executor():
+    global _executor
+    if _executor is None:
+        _executor = ProcessPoolExecutor()
+    return _executor
 
 class GlobalBeliefModel(BeliefModel):
     """
@@ -37,6 +48,10 @@ class GlobalBeliefModel(BeliefModel):
         # Key: (player_id, pos1, pos2), Value: is_equal (True if same, False if different)
         self.adjacent_constraints: Dict[Tuple[int, int, int], bool] = {}
         
+        # Cache for signatures
+        # Key: (player_id, belief_hash, constraint_hash) -> Set[Tuple[int, ...]]
+        self._signature_cache = {}
+        
         super().__init__(observation, config)
 
     def apply_filters(self):
@@ -62,14 +77,45 @@ class GlobalBeliefModel(BeliefModel):
         # V[i] stores set of valid signatures (tuples) for player i
         V: List[Set[Tuple[int, ...]]] = []
         
+        futures = []
+        cache_keys = []
+        
         for i in range(N):
-            sigs = self._generate_valid_signatures(i)
-            if not sigs:
-                # Contradiction detected for this player
-                # In a real game, this shouldn't happen unless state is inconsistent
-                print(f"CRITICAL: No valid hands found for player {i}")
-                return
-            V.append(sigs)
+            min_counts = self._get_min_counts(i)
+            cache_key = self._get_cache_key(i, min_counts)
+            cache_keys.append(cache_key)
+            
+            if cache_key in self._signature_cache:
+                # Use cached result (dummy future)
+                V.append(self._signature_cache[cache_key])
+                futures.append(None)
+            else:
+                # Submit task
+                args = (
+                    i, 
+                    self.config.wires_per_player, 
+                    self.sorted_values, 
+                    self.val_to_idx, 
+                    self.config.wire_distribution, 
+                    self.beliefs[i], 
+                    self.copy_count_constraints, 
+                    self.adjacent_constraints, 
+                    min_counts, 
+                    self.K
+                )
+                futures.append(get_executor().submit(generate_signatures_worker, *args))
+                V.append(None) # Placeholder
+
+        # Collect results
+        for i, f in enumerate(futures):
+            if f is not None:
+                sigs = f.result()
+                if not sigs:
+                    print(f"CRITICAL: No valid hands found for player {i}")
+                    return
+                V[i] = sigs
+                # Update cache
+                self._signature_cache[cache_keys[i]] = sigs
 
         # --- Phase 2: Forward Pass (Alpha) ---
         # Alpha[i] = set of consumed resource vectors after player i (0 to i-1)
@@ -121,227 +167,59 @@ class GlobalBeliefModel(BeliefModel):
         # --- Phase 3: Projection ---
         # For each player, find globally valid signatures and project to domains
         
+        futures = []
         for p in range(N):
-            valid_signatures = set()
+            args = (
+                V[p], 
+                Alpha[p], 
+                Beta[p+1], 
+                self.total_deck, 
+                self.sorted_values, 
+                self.config.wires_per_player
+            )
+            futures.append(get_executor().submit(filter_signatures_worker, *args))
             
-            # A signature 'sig' for player 'p' is valid if:
-            # exists prev in Alpha[p], next in Beta[p+1] s.t. prev + sig + next == Total
-            # => prev + next == Total - sig
-            
-            # Optimization: Iterate sigs, calculate remainder, check if split exists
-            for sig in V[p]:
-                remainder = tuple(t - s for t, s in zip(self.total_deck, sig))
-                
-                # Check if remainder can be formed by Alpha[p] + Beta[p+1]
-                # This is still potentially O(|Alpha| * |Beta|), which can be large.
-                # But usually Alpha and Beta are sparse.
-                
-                is_valid = False
-                # We need to find if ANY pair sums to remainder
-                # Iterate the smaller set for efficiency
-                if len(Alpha[p]) < len(Beta[p+1]):
-                    for prev in Alpha[p]:
-                        needed_next = tuple(r - a for r, a in zip(remainder, prev))
-                        if needed_next in Beta[p+1]:
-                            is_valid = True
-                            break
-                else:
-                    for next_vec in Beta[p+1]:
-                        needed_prev = tuple(r - n for r, n in zip(remainder, next_vec))
-                        if needed_prev in Alpha[p]:
-                            is_valid = True
-                            break
-                
-                if is_valid:
-                    valid_signatures.add(sig)
-            
-            # Now project valid signatures back to domains
-            self._project_signatures_to_beliefs(p, valid_signatures)
-
-    def _generate_valid_signatures(self, player_id: int) -> Set[Tuple[int, ...]]:
-        """
-        Generates all valid signatures (resource vectors) for a player
-        given their local constraints (beliefs, called values).
-        """
-        valid_sigs = set()
+        results = [f.result() for f in futures]
         
-        # Constraints
+        for p, new_domains in enumerate(results):
+            for pos in range(self.config.wires_per_player):
+                # Intersect with existing beliefs
+                self.beliefs[p][pos] &= new_domains[pos]
+                
+                if not self.beliefs[p][pos]:
+                    print(f"CRITICAL: Belief for P{p} Pos{pos} became empty during projection!")
+
+    def _get_min_counts(self, player_id: int) -> Dict[Union[int, float], int]:
+        min_counts = collections.defaultdict(int)
         hand_size = self.config.wires_per_player
         player_beliefs = self.beliefs[player_id]
         
-        # "Called" constraints: Minimum count for specific values
-        min_counts = collections.defaultdict(int)
-        
-        # 1. Count from certain positions
         for pos in range(hand_size):
             if len(player_beliefs[pos]) == 1:
                 val = list(player_beliefs[pos])[0]
                 min_counts[val] += 1
-        
-        # 2. Add "called" but unlocated copies
-        # If player is in 'called' list for a value, they must have an EXTRA copy
-        # beyond what is already certain/revealed?
-        # Based on ValueTracker logic: 'called' means "has value, position unknown".
-        # 'certain' means "has value, position known".
-        # 'add_certain' removes from 'called'.
-        # So 'called' implies a copy that is NOT in 'certain'.
-        # So we simply increment the requirement.
+                
         for val, tracker in self.value_trackers.items():
             if player_id in tracker.called:
                 min_counts[val] += 1
-        
-        # Prepare for recursion
-        # We generate sorted hands, then convert to signature
-        # We need to track the actual hand to check positional constraints
-        
-        current_hand = [None] * hand_size
-        
-        def backtrack(pos: int, min_val_idx: int, current_counts: Dict[int, int]):
-            if pos == hand_size:
-                # Hand complete - validate all constraints before adding
-                
-                # Check adjacent constraints
-                for (pid, p1, p2), is_equal in self.adjacent_constraints.items():
-                    if pid == player_id:
-                        # Ensure positions are within the hand we're building
-                        if p1 < hand_size and p2 < hand_size:
-                            val1 = current_hand[p1]
-                            val2 = current_hand[p2]
-                            if is_equal and val1 != val2:
-                                return  # Constraint violated
-                            if not is_equal and val1 == val2:
-                                return  # Constraint violated
-                
-                # Convert counts to signature vector
-                sig = [0] * self.K
-                for v_idx, count in current_counts.items():
-                    sig[v_idx] = count
-                valid_sigs.add(tuple(sig))
-                return
+        return dict(min_counts)
 
-            # Possible values for this position
-            # Must be >= min_val_idx (sorted)
-            # Must be in beliefs[pos]
-            # Count must not exceed global total
-            
-            possible_values = player_beliefs[pos]
-            
-            # Check copy count constraint for this position
-            if (player_id, pos) in self.copy_count_constraints:
-                required_copies = self.copy_count_constraints[(player_id, pos)]
-                # Filter possible values to only those with required copy count
-                possible_values = {v for v in possible_values 
-                                 if self.config.wire_distribution[v] == required_copies}
-            
-            # Iterate through sorted values starting from min_val_idx
-            for v_idx in range(min_val_idx, self.K):
-                val = self.sorted_values[v_idx]
-                
-                # Check if value is allowed at this position
-                if val not in possible_values:
-                    continue
-                
-                # Check global count constraint
-                if current_counts.get(v_idx, 0) >= self.config.get_copies(val):
-                    continue
-                
-                # Check adjacent equality constraint (early pruning)
-                # If previous position exists and we have an adjacent constraint
-                if pos > 0:
-                    # Check if there's a constraint between pos-1 and pos
-                    if (player_id, pos-1, pos) in self.adjacent_constraints:
-                        is_equal = self.adjacent_constraints[(player_id, pos-1, pos)]
-                        prev_val = current_hand[pos-1]
-                        if is_equal and val != prev_val:
-                            continue  # Must be equal but isn't
-                        if not is_equal and val == prev_val:
-                            continue  # Must be different but isn't
-                    # Also check reverse ordering (pos, pos-1)
-                    if (player_id, pos, pos-1) in self.adjacent_constraints:
-                        is_equal = self.adjacent_constraints[(player_id, pos, pos-1)]
-                        prev_val = current_hand[pos-1]
-                        if is_equal and val != prev_val:
-                            continue
-                        if not is_equal and val == prev_val:
-                            continue
-                
-                # Update state
-                current_hand[pos] = val
-                current_counts[v_idx] = current_counts.get(v_idx, 0) + 1
-                
-                # Recurse
-                backtrack(pos + 1, v_idx, current_counts)
-                
-                # Backtrack
-                current_hand[pos] = None
-                current_counts[v_idx] -= 1
-                if current_counts[v_idx] == 0:
-                    del current_counts[v_idx]
+    def _get_cache_key(self, player_id: int, min_counts: Dict):
+        # Hash beliefs
+        beliefs_tuple = tuple(frozenset(self.beliefs[player_id][pos]) for pos in range(self.config.wires_per_player))
+        
+        # Hash constraints
+        # Copy count constraints for this player
+        cc_constraints = tuple(sorted((pos, count) for (pid, pos), count in self.copy_count_constraints.items() if pid == player_id))
+        
+        # Adjacent constraints for this player
+        adj_constraints = tuple(sorted(((p1, p2), eq) for (pid, p1, p2), eq in self.adjacent_constraints.items() if pid == player_id))
+        
+        # Min counts
+        mc_tuple = tuple(sorted(min_counts.items()))
+        
+        return (player_id, beliefs_tuple, cc_constraints, adj_constraints, mc_tuple)
 
-        # Start backtracking
-        backtrack(0, 0, {})
-        
-        # Filter signatures by min_counts
-        # We could have done this inside backtracking, but it's easier here
-        # unless the space is huge.
-        # Actually, let's filter the RESULTING signatures.
-        final_sigs = set()
-        for sig in valid_sigs:
-            valid = True
-            for val, min_c in min_counts.items():
-                v_idx = self.val_to_idx[val]
-                if sig[v_idx] < min_c:
-                    valid = False
-                    break
-            if valid:
-                final_sigs.add(sig)
-                
-        return final_sigs
-
-    def _project_signatures_to_beliefs(self, player_id: int, valid_signatures: Set[Tuple[int, ...]]):
-        """
-        Given a set of globally valid signatures for a player,
-        reconstruct the possible values for each position.
-        """
-        hand_size = self.config.wires_per_player
-        
-        # Initialize new domains as empty
-        new_domains = [set() for _ in range(hand_size)]
-        
-        # For each signature, reconstruct the UNIQUE sorted hand
-        for sig in valid_signatures:
-            # Reconstruct hand from signature
-            hand = []
-            for v_idx, count in enumerate(sig):
-                val = self.sorted_values[v_idx]
-                hand.extend([val] * count)
-            
-            # Hand is already sorted because we iterated v_idx in order
-            
-            # Verify this hand is locally valid (matches beliefs)
-            # (It should be, because we generated signatures from valid hands,
-            # but multiple hands could map to same signature?
-            # WAIT. If hand is sorted, Signature -> Hand is 1-to-1.
-            # So the hand MUST be valid if the signature was generated from a valid hand?
-            # YES, provided we enforced positional constraints during generation.
-            # BUT, did we?
-            # In _generate_valid_signatures, we checked `val in possible_values` at each step.
-            # So the hand generated IS valid.
-            # AND since Signature->Hand is 1-to-1 for sorted hands,
-            # the reconstructed hand is EXACTLY the one we generated.
-            
-            # Add values to domains
-            for pos in range(hand_size):
-                new_domains[pos].add(hand[pos])
-        
-        # Update beliefs
-        for pos in range(hand_size):
-            # Intersect with existing beliefs (should be subset anyway, but good for safety)
-            self.beliefs[player_id][pos] &= new_domains[pos]
-            
-            # If domain becomes empty, that's an issue (shouldn't happen if logic is correct)
-            if not self.beliefs[player_id][pos]:
-                print(f"CRITICAL: Belief for P{player_id} Pos{pos} became empty during projection!")
     
     def process_copy_count_signal(self, signal_record: SignalCopyCountRecord):
         """
