@@ -24,7 +24,7 @@ def run_simulation():
     
     # Timing data
     filter_times = []
-    K = 10 
+    K = 15 
     
     # Identify VOID player if present
     void_player_id = None
@@ -43,8 +43,22 @@ def run_simulation():
     for p in players:
         print(f"Player {p.player_id} wire: {p.wire}")
         
+    # Initial signals: Each player signals one of their own cards
+    print("\n--- Initial Signals ---")
+    for p in players:
+        if p.player_id == void_player_id:
+            continue
+        
+        # Pick a random position to signal
+        pos_to_signal = random.randint(0, len(p.wire) - 1)
+        value_to_signal = p.wire[pos_to_signal]
+        
+        print(f"Player {p.player_id} signals pos {pos_to_signal} is {value_to_signal}")
+        game.signal_value(p.player_id, value_to_signal, pos_to_signal)
+
     # 5. Game Loop
     max_turns = 500
+    consecutive_skips = 0
     while not game.is_game_over() and game.current_turn < max_turns:
         current_player_id = game.current_turn % config.n_players
         
@@ -53,6 +67,10 @@ def run_simulation():
             print(f"\n--- Turn {game.current_turn} (VOID Player) ---")
             print("Skipping VOID player turn.")
             game.current_turn += 1
+            consecutive_skips += 1
+            if consecutive_skips >= config.n_players:
+                print("All players skipped. Ending game.")
+                break
             continue
         game.current_turn += 1
         agent = agents[current_player_id]
@@ -61,6 +79,7 @@ def run_simulation():
         action = agent.choose_action(game)
         
         if action:
+            consecutive_skips = 0
             target_id, position, value = action
             
             print(f"Agent {current_player_id} calls Player {target_id} pos {position} value {value}")
@@ -90,9 +109,6 @@ def run_simulation():
                     # Calculate entropy
                     stats = GameStatistics(p.belief_system, config, p.wire)
                     entropy = stats.calculate_system_entropy()
-                    if entropy == 0:
-                        print("Entropy is zero, all beliefs resolved.")
-                        break
                     
                     filter_times.append({
                         "turn": game.current_turn,
@@ -104,14 +120,16 @@ def run_simulation():
                     filename = "global_filter_time.json" if config.use_global_belief else "human_filter_time.json"
                     with open(filename, "w") as f:
                         json.dump(filter_times, f, indent=2)
-                    
-                    if entropy == 0:
-                        break
+                
 
             except ValueError as e:
                 print(f"Invalid call attempted: {e}")
         else:
             print(f"Agent {current_player_id} could not make a valid move.")
+            consecutive_skips += 1
+            if consecutive_skips >= config.n_players:
+                print("All players skipped. Ending game.")
+                break
             continue
             
     # 6. Results

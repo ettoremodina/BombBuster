@@ -1,3 +1,6 @@
+# NOTE
+The entropy-based suggester is not optimal. It maximizes MY information gain, but not necessarily for the next player to play. Best way would be to maximize the expected information gain for the next player, given my action. This would require simulating all possible actions and their outcomes, which is more complex.
+
 # TO DO
 
 ## switch solver based on entropy

@@ -17,7 +17,6 @@ EXTRA_UNCERTAIN_WIRES = {
     6.5: 1,
 }
 # Your player configuration
-MY_PLAYER_NAME = "Ettore"
 MY_WIRE = [1,3,4,6,6,7,8,9,9,10,99]
 
 # Player names (in order by player ID)
@@ -30,6 +29,7 @@ PLAYER_NAMES = [
 ]
 
 
+MY_PLAYER_NAME = "Ettore"
 # Belief folder for saving/loading game state
 BELIEF_FOLDER = "real_game_beliefs"
 

@@ -259,7 +259,7 @@ class BombBusterGUI:
         
         self.current_action_type = action_type
     
-    def draw_player_hand(self, parent_frame, player_id, title=None, position_key=None, panel=None, player_key=None, highlight_positions=None, playable_values=None, certain_values=None, invalid_value=None, entropy_best_position_values=None):
+    def draw_player_hand(self, parent_frame, player_id, title=None, position_key=None, panel=None, player_key=None, highlight_positions=None, playable_values=None, certain_position_values=None, invalid_value=None, entropy_best_position_values=None):
         """Draw a player's hand visualization in the given frame.
         
         Args:
@@ -271,7 +271,7 @@ class BombBusterGUI:
             player_key: The key identifying the player in the panel (e.g. 'caller', 'target')
             highlight_positions: Optional list of position indices to highlight directly
             playable_values: Optional set of values that are playable (for coloring suggestions)
-            certain_values: Optional set of values that are certain (single unrevealed value)
+            certain_position_values: Optional dict {position -> set of values} that are certain (single unrevealed value)
             invalid_value: Optional value to check - positions that cannot have this value will be greyed out
             entropy_best_position_values: Optional dict {position -> set of values} for entropy-suggested calls
         """
@@ -354,8 +354,8 @@ class BombBusterGUI:
                 should_highlight = False
                 
                 # Check certain values (certain calls)
-                if certain_values is not None and playable_values is not None:
-                    if pos_beliefs & certain_values:  # Set intersection
+                if certain_position_values is not None and pos in certain_position_values:
+                    if pos_beliefs & certain_position_values[pos]:  # Set intersection
                         should_highlight = True
                 
                 # Check entropy-suggested values (position-specific)
@@ -1779,7 +1779,7 @@ class SuggesterPanel(tk.Frame):
             
             # Extract playable values for this player, categorized by certainty
             playable_values = set()
-            certain_values = set()
+            certain_position_values = {}
             # For entropy-suggested calls, we need to track position-value pairs, not just values
             # because the same value might appear in multiple positions
             entropy_best_position_values = {}  # position -> set of values that are entropy-best at that position
@@ -1787,7 +1787,9 @@ class SuggesterPanel(tk.Frame):
             for pos, val, uncertainty, is_entropy_best in suggestions_by_player[target_id]:
                 playable_values.add(val)
                 if uncertainty == 1:  # Certain calls have uncertainty=1 (only 1 possible value)
-                    certain_values.add(val)
+                    if pos not in certain_position_values:
+                        certain_position_values[pos] = set()
+                    certain_position_values[pos].add(val)
                 if is_entropy_best:
                     # Track which value is entropy-best at which specific position
                     if pos not in entropy_best_position_values:
@@ -1800,7 +1802,7 @@ class SuggesterPanel(tk.Frame):
             self.app.draw_player_hand(hand_frame, target_id, title="", 
                                      highlight_positions=suggested_positions,
                                      playable_values=playable_values,
-                                     certain_values=certain_values,
+                                     certain_position_values=certain_position_values,
                                      invalid_value=invalid_value,
                                      entropy_best_position_values=entropy_best_position_values)
 
