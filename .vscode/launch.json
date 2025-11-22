@@ -5,6 +5,7 @@
     "version": "0.2.0",
     "configurations": [
 
+
         {
             "name": "Python Debugger: Current File",
             "type": "debugpy",
@@ -19,6 +20,15 @@
             "program": "${workspaceFolder}/play_irl_gui.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "AUTO",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/play_auto.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}"
         }
+    
     ]
 }

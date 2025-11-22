@@ -7,7 +7,7 @@ import random
 import json
 from typing import List, Union, Dict, Tuple, Optional
 from pathlib import Path
-from config.game_config import GameConfig
+from config.game_config import GameConfig, USE_VOID_PLAYER, EXTRA_UNCERTAIN_WIRES, PLAYER_NAMES
 from src.statistics import GameStatistics
 
 
@@ -25,6 +25,74 @@ def generate_wires(config: GameConfig, seed: int = None) -> List[List[Union[int,
     if seed is not None:
         random.seed(seed)
     
+    if USE_VOID_PLAYER:
+        # 1. Identify VOID player
+        try:
+            void_idx = PLAYER_NAMES.index("VOID")
+        except ValueError:
+            # Fallback if VOID not found in names but flag is set
+            void_idx = config.n_players - 1 
+            print("WARNING: VOID player not found in PLAYER_NAMES, assigning last index as VOID.")
+        
+        # 2. Select one uncertain wire for VOID
+        uncertain_candidates = []
+        for val, count in EXTRA_UNCERTAIN_WIRES.items():
+            uncertain_candidates.extend([val] * count)
+        
+        if not uncertain_candidates:
+             void_wire_val = None
+        else:
+            void_wire_val = random.choice(uncertain_candidates)
+            
+        # 3. Build decks
+        real_deck = []
+        void_deck = []
+        
+        # Collect all 0s for VOID
+        zeros_count = config.get_copies(0)
+        if zeros_count > 0:
+            void_deck.extend([0] * zeros_count)
+        
+        # Add the chosen uncertain wire to VOID
+        if void_wire_val is not None:
+            void_deck.append(void_wire_val)
+            
+        # Now build real_deck with everything else
+        for value in config.wire_values:
+            if value == 0:
+                continue # Already handled
+            
+            count = config.get_copies(value)
+            
+            if value == void_wire_val:
+                # We gave one to VOID
+                count -= 1
+            
+            if count > 0:
+                real_deck.extend([value] * count)
+                
+        # Shuffle real deck
+        random.shuffle(real_deck)
+        
+        # Distribute
+        wires = [None] * config.n_players
+        
+        # Assign VOID wire
+        wires[void_idx] = sorted(void_deck)
+        
+        # Assign Real wires
+        current_idx = 0
+        for i in range(config.n_players):
+            if i == void_idx:
+                continue
+                
+            hand_size = config.wires_per_player
+            wires[i] = sorted(real_deck[current_idx : current_idx + hand_size])
+            current_idx += hand_size
+            
+        return wires
+
+    # Standard generation (No VOID player)
     # Create full deck
     deck = []
     for value in config.wire_values:

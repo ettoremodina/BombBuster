@@ -3,7 +3,7 @@ Game class manages the game state, enforces rules, and coordinates player action
 This is the central orchestrator for BombBuster gameplay.
 """
 
-from typing import List, Optional, Dict, Union
+from typing import List, Optional, Dict, Union, Tuple
 from src.data_structures import CallRecord, DoubleRevealRecord, SwapRecord, SignalRecord, NotPresentRecord, SignalCopyCountRecord, SignalAdjacentRecord, GameObservation
 from src.player import Player
 from config.game_config import GameConfig
@@ -44,6 +44,15 @@ class Game:
         self.players = players
         self.config = config
         self.call_history: List[CallRecord] = []
+        self.double_reveal_history: List[DoubleRevealRecord] = []
+        self.swap_history: List[SwapRecord] = []
+        self.signal_history: List[SignalRecord] = []
+        self.reveal_history: List[SignalRecord] = []
+        self.not_present_history: List[NotPresentRecord] = []
+        self.copy_count_signal_history: List[SignalCopyCountRecord] = []
+        self.adjacent_signal_history: List[SignalAdjacentRecord] = []
+        self.has_values_history: List[Tuple[int, Union[int, float]]] = [] # (player_id, value)
+        
         self.current_turn = 0
         self.wrong_calls_count = 0
         self.game_over = False
@@ -166,7 +175,7 @@ class Game:
         self._check_win_condition()
         
         # Increment turn
-        self.current_turn += 1
+        # self.current_turn += 1
         
         return call_record
     
@@ -199,6 +208,8 @@ class Game:
             turn_number=self.current_turn
         )
         
+        self.double_reveal_history.append(reveal_record)
+        
         # Broadcast to all players
         self._broadcast_double_reveal(reveal_record)
         
@@ -206,7 +217,7 @@ class Game:
         self._check_win_condition()
         
         # Increment turn
-        self.current_turn += 1
+        # self.current_turn += 1
         
         return reveal_record
     
@@ -237,6 +248,8 @@ class Game:
             turn_number=self.current_turn
         )
         
+        self.signal_history.append(signal_record)
+        
         # Broadcast to all players
         self._broadcast_signal(signal_record)
         
@@ -244,7 +257,7 @@ class Game:
         self._check_win_condition()
         
         # Increment turn
-        self.current_turn += 1
+        # self.current_turn += 1
         
         return signal_record
     
@@ -275,6 +288,8 @@ class Game:
             turn_number=self.current_turn
         )
         
+        self.reveal_history.append(reveal_record)
+        
         # Broadcast to all players (use reveal processing)
         self._broadcast_reveal(reveal_record)
         
@@ -282,7 +297,7 @@ class Game:
         self._check_win_condition()
         
         # Increment turn
-        self.current_turn += 1
+        # self.current_turn += 1
         
         return reveal_record
     
@@ -410,6 +425,8 @@ class Game:
             turn_number=self.current_turn
         )
         
+        self.not_present_history.append(not_present_record)
+        
         # Broadcast to all players
         self._broadcast_not_present(not_present_record)
         
@@ -417,7 +434,7 @@ class Game:
         self._check_win_condition()
         
         # Increment turn
-        self.current_turn += 1
+        # self.current_turn += 1
         
         return not_present_record
     
@@ -448,6 +465,8 @@ class Game:
             turn_number=self.current_turn
         )
         
+        self.copy_count_signal_history.append(signal_record)
+        
         # Broadcast to all players
         self._broadcast_copy_count(signal_record)
         
@@ -455,7 +474,7 @@ class Game:
         self._check_win_condition()
         
         # Increment turn
-        self.current_turn += 1
+        # self.current_turn += 1
         
         return signal_record
     
@@ -487,6 +506,8 @@ class Game:
             turn_number=self.current_turn
         )
         
+        self.adjacent_signal_history.append(signal_record)
+        
         # Broadcast to all players
         self._broadcast_adjacent(signal_record)
         
@@ -494,7 +515,7 @@ class Game:
         self._check_win_condition()
         
         # Increment turn
-        self.current_turn += 1
+        # self.current_turn += 1
         
         return signal_record
     
@@ -517,7 +538,7 @@ class Game:
         self._broadcast_has_value(player_id, value)
         
         # Increment turn
-        self.current_turn += 1
+        # self.current_turn += 1
     
     def _validate_has_value(self, player_id: int, value: Union[int, float]):
         """
@@ -848,6 +869,8 @@ class Game:
             turn_number=self.current_turn
         )
         
+        self.swap_history.append(swap_record)
+        
         # Broadcast to all players
         self._broadcast_swap(swap_record)
         
@@ -855,7 +878,7 @@ class Game:
         self._check_win_condition()
         
         # Increment turn
-        self.current_turn += 1
+        # self.current_turn += 1
         
         return swap_record
     

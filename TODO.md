@@ -1,20 +1,6 @@
 # TO DO
 
-## 3 red wires problem + uneven hand sizes
-
-
-
-
-
-
-
-
-
-
-## automatic playing
-- check if the game can play automatically and do some simulations
-  
-## optimal choice algorithm
+## switch solver based on entropy
 
 
 ## CHECK ALL FILTERS INDIVIDUALLY

@@ -4,7 +4,7 @@ Useful for testing and as a baseline strategy.
 """
 
 import random
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 from src.agents.base_agent import BaseAgent
 from src.player import Player
 from src.game import Game
@@ -15,10 +15,9 @@ class RandomAgent(BaseAgent):
     Agent that makes random valid calls.
     
     Strategy:
-    1. Find all values this player has
-    2. Pick a random target player
-    3. Pick a random position
-    4. Pick a random value from what this player has
+    1. Find all values this player has that are NOT revealed (playable values)
+    2. Find all valid target positions (not self, not VOID, not revealed)
+    3. Pick a random target/position and a random playable value
     """
     
     def __init__(self, player: Player):
@@ -40,57 +39,19 @@ class RandomAgent(BaseAgent):
         Returns:
             Tuple of (target_id, position, value) or None if no valid calls
         """
-        targets = self._get_valid_targets(game)
-        if not targets:
+        # 1. Get playable values (values I have that are not revealed)
+        playable_values = self.get_playable_values(game)
+        if not playable_values:
             return None
             
-        target_id = random.choice(targets)
-        
-        positions = self._get_valid_positions(game)
-        if not positions:
+        # 2. Find all valid (target, position) pairs
+        valid_targets = self.get_valid_targets(game)
+        if not valid_targets:
             return None
             
-        position = random.choice(positions)
-        
-        values = self._get_available_values()
-        if not values:
-            return None
-            
-        value = random.choice(values)
+        # 3. Choose random move and value
+        target_id, position = random.choice(valid_targets)
+        value = random.choice(playable_values)
         
         return (target_id, position, value)
-    
-    def _get_valid_targets(self, game: Game) -> List[int]:
-        """
-        Get list of valid target players (not self).
-        
-        Args:
-            game: Current game state
-        
-        Returns:
-            List of player IDs
-        """
-        return [p.player_id for p in game.players if p.player_id != self.player.player_id]
-    
-    def _get_valid_positions(self, game: Game) -> List[int]:
-        """
-        Get list of valid positions to call.
-        
-        Args:
-            game: Current game state
-        
-        Returns:
-            List of position indices
-        """
-        return list(range(game.config.wires_per_player))
-    
-    def _get_available_values(self) -> List[int]:
-        """
-        Get list of values this player has.
-        
-        Returns:
-            List of wire values
-        """
-        if self.player.wire is None:
-            return []
-        return list(set(self.player.wire))
+

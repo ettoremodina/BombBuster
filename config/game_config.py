@@ -2,7 +2,7 @@
 Game configuration parameters for BombBuster.
 Defines the wire distribution, number of players, and game constraints.
 """
-
+USE_GLOBAL_BELIEF = False # Use the new global belief model (True) or the old one (False)
 # Game parameters
 # Define wire values and their copy counts
 # Format: {value: number_of_copies}
@@ -36,7 +36,7 @@ BELIEF_FOLDER = "real_game_beliefs"
 # Options
 AUTO_SAVE = True       # Automatically save after each action
 LOAD_EXISTING = True   # Load existing beliefs on startup
-USE_GLOBAL_BELIEF = True # Use the new global belief model (True) or the old one (False)
+
 MAX_UNCERTAINTY = 4  # Max uncertainty level for entropy analysis
 
 
@@ -97,7 +97,7 @@ NUM_PLAYERS = N
 WIRES_PER_PLAYER = TOTAL_WIRES // N
 
 # Game rules
-MAX_WRONG_CALLS = 5      # Team loses if they make this many wrong calls
+MAX_WRONG_CALLS = 1000      # Team loses if they make this many wrong calls
 
 
 class GameConfig:
@@ -113,7 +113,7 @@ class GameConfig:
         max_wrong_calls: int = MAX_WRONG_CALLS,
         playing_irl: bool = False,
         use_global_belief: bool = False,
-        auto_filter: bool = True
+        auto_filter: bool = False
     ):
         """
         Initialize game configuration.
