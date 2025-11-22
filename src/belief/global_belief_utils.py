@@ -18,10 +18,25 @@ def generate_signatures_worker(
     """
     valid_sigs = set()
     
+    # Pre-process min_counts to use indices for faster lookup
+    min_counts_indices = {val_to_idx[v]: c for v, c in min_counts.items()}
+    
     # Prepare for recursion
     current_hand = [None] * hand_size
     
     def backtrack(pos: int, min_val_idx: int, current_counts: Dict[int, int]):
+        # Pruning: Check if we can still satisfy min_counts
+        remaining_slots = hand_size - pos
+        needed_sum = 0
+        for v_idx, min_c in min_counts_indices.items():
+            curr = current_counts.get(v_idx, 0)
+            if min_c > curr:
+                needed = min_c - curr
+                needed_sum += needed
+        
+        if needed_sum > remaining_slots:
+            return
+
         if pos == hand_size:
             # Hand complete - validate all constraints before adding
             

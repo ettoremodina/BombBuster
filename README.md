@@ -36,6 +36,8 @@ Whenever a public event happens (successful or failed call, double reveal, swap)
 - Remaining copies distance filter ⛓️ – checks if assigning a value would force a chain of identical values (due to sorting) that exceeds the total available copies of that value.
 - Called value filter 📢 – leverages "I have a X" announcements to constrain beliefs, enforcing that called values must exist in the player's hand and deducing positions when options are limited.
 
+In addition to these local filters, a **Global Belief Model** ensures consistency across the entire game state. It uses a Propagated Dynamic Programming algorithm to verify that the combination of all players' possible hands sums up to the exact total deck of cards. This advanced filtering runs in parallel to prune scenarios that are locally valid but globally impossible.
+
 Throughout, a Markovian assumption is used: only the current game state and the public history of actions matter for beliefs, not the exact order in which logically equivalent updates were applied.
 
 
@@ -44,7 +46,7 @@ Throughout, a Markovian assumption is used: only the current game state and the 
 - Simulation mode – generate wires, run games in code, and inspect belief states after each action. The engine handles validation of actions and win/loss detection.
 - IRL helper mode – use `play_irl.py` and utilities in `src/utils.py` to drive the engine while you play with physical cards. Human‑friendly inputs (names, 1‑indexed positions) are converted to internal actions; strict consistency checks can be relaxed with an IRL flag.
 - IRL GUI – use `play_irl_gui.py` for a graphical, click-based interface to track real-life games. It supports easy action recording, state visualization, and session saving/loading.
-- Call suggester – given a belief model and the values a player holds, suggest promising calls, prioritizing certain calls and then those with minimal remaining uncertainty.
+- Call suggester – now powered by an **Entropy-Based** engine (Gain Information Based Suggestions). It calculates the Expected Information Gain for every possible call by simulating the outcome (success or failure) and measuring the reduction in global uncertainty. This allows the system to recommend the move that most efficiently narrows down the search space.
 
 
 ## Future directions 🚀
