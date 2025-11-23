@@ -222,12 +222,7 @@ class BeliefModel:
     def process_copy_count_signal(self, signal_record: SignalCopyCountRecord):
         """
         Update beliefs based on a copy count signal.
-        When a player signals that a position has a value with a specific number of copies.
-        
-        This filters the belief set at that position to only include values with the signaled copy count.
-        
-        NOTE: This method only works with BeliefModel (not GlobalBeliefModel) because it filters
-        individual position beliefs based on value properties.
+        When a player signals that a position has a value with a specific number of copies IN THEIR HAND.
         
         Args:
             signal_record: The copy count signal to process
@@ -236,26 +231,29 @@ class BeliefModel:
         position = signal_record.position
         copy_count = signal_record.copy_count
         
-        # Filter beliefs at this position to only include values with the signaled copy count
-        current_beliefs = self.beliefs[player_id][position]
-        filtered_beliefs = {v for v in current_beliefs if self.config.wire_distribution[v] == copy_count}
+        # # Store the constraint for GlobalBeliefModel and other advanced filters
+        self.copy_count_constraints[(player_id, position)] = copy_count
         
-        # Update beliefs
-        if filtered_beliefs:
-            self.beliefs[player_id][position] = filtered_beliefs
+        # # Filter beliefs at this position:
+        # # A value v is possible only if the total number of copies of v in the deck is >= copy_count.
+        # current_beliefs = self.beliefs[player_id][position]
+        # filtered_beliefs = {v for v in current_beliefs if self.config.wire_distribution[v] >= copy_count}
         
-        # Apply filters to deduce new information
-        if self.config.auto_filter:
-            self.apply_filters()
+        # # Update beliefs
+        # if filtered_beliefs:
+        #     self.beliefs[player_id][position] = filtered_beliefs
+        
+        # # Apply filters to deduce new information
+        # if self.config.auto_filter:
+        #     self.apply_filters()
+        
     
     def process_adjacent_signal(self, signal_record: SignalAdjacentRecord):
         """
-        Update beliefs based on an adjacent position signal.
-        When a player signals that two adjacent positions have the same or different values.
+        Override to handle adjacent position signals with GlobalBeliefModel.
         
-        This constrains the belief sets of the two positions based on the relationship:
-        - If is_equal=True: intersection of beliefs for both positions
-        - If is_equal=False: remove values that appear in both positions
+        Stores the constraint and enforces it during signature generation.
+        The global consistency algorithm will natively respect this constraint.
         
         Args:
             signal_record: The adjacent signal to process
@@ -265,33 +263,35 @@ class BeliefModel:
         pos2 = signal_record.position2
         is_equal = signal_record.is_equal
         
+        # Store the constraint for use in signature generation
+        # Normalize to always store (smaller_pos, larger_pos)
+        min_pos, max_pos = min(pos1, pos2), max(pos1, pos2)
+        self.adjacent_constraints[(player_id, min_pos, max_pos)] = is_equal
+        
+        # Also apply immediate filtering to beliefs
         beliefs1 = self.beliefs[player_id][pos1]
         beliefs2 = self.beliefs[player_id][pos2]
         
         if is_equal:
             # Both positions must have the same value
-            # The possible values are the intersection of both belief sets
             common_values = beliefs1 & beliefs2
             if common_values:
                 self.beliefs[player_id][pos1] = common_values
                 self.beliefs[player_id][pos2] = common_values
         else:
-            # Positions have different values
-            # Remove values from pos1 that are only possible at pos2 if pos2 is certain
-            # and vice versa
+            # Positions have different values - filter if either is certain
             if len(beliefs2) == 1:
-                # pos2 is certain, so pos1 cannot have that value
                 certain_value = next(iter(beliefs2))
                 self.beliefs[player_id][pos1] = beliefs1 - {certain_value}
             if len(beliefs1) == 1:
-                # pos1 is certain, so pos2 cannot have that value
                 certain_value = next(iter(beliefs1))
                 self.beliefs[player_id][pos2] = beliefs2 - {certain_value}
         
-        # Apply filters to deduce new information
+        # Run global solver to propagate constraints
         if self.config.auto_filter:
             self.apply_filters()
-    
+
+
     def process_swap(self, swap_record: SwapRecord):
         """
         Update beliefs based on a wire swap between two players.
@@ -607,6 +607,16 @@ class BeliefModel:
         # After filtering, update ValueTracker for any newly certain positions
         # print(f"performed {iteration} loops of filters")
         self._update_value_trackers()
+        
+        # Save state if playing IRL
+        if self.config.playing_irl:
+            try:
+                # Import here to avoid circular imports
+                from config.game_config import BELIEF_FOLDER, PLAYER_NAMES
+                player_names_dict = {i: name for i, name in enumerate(PLAYER_NAMES)}
+                self.save_to_folder(BELIEF_FOLDER, player_names_dict)
+            except Exception as e:
+                print(f"Warning: Failed to auto-save belief state: {e}")
     
     def _update_value_trackers(self):
         """
@@ -1133,78 +1143,6 @@ class BeliefModel:
                         changed = True
                             
         return changed
-    
-    
-    def process_copy_count_signal(self, signal_record: SignalCopyCountRecord):
-        """
-        Override to handle copy count signals with GlobalBeliefModel.
-        
-        Stores the constraint and enforces it during signature generation.
-        The global consistency algorithm will natively respect this constraint.
-        
-        Args:
-            signal_record: The copy count signal to process
-        """
-        player_id = signal_record.player_id
-        position = signal_record.position
-        copy_count = signal_record.copy_count
-        
-        # Store the constraint for use in signature generation
-        self.copy_count_constraints[(player_id, position)] = copy_count
-        
-        # Also apply immediate filtering to beliefs
-        current_beliefs = self.beliefs[player_id][position]
-        filtered_beliefs = {v for v in current_beliefs if self.config.wire_distribution[v] == copy_count}
-        
-        if filtered_beliefs:
-            self.beliefs[player_id][position] = filtered_beliefs
-        
-        # Run global solver to propagate constraints
-        if self.config.auto_filter:
-            self.apply_filters()
-    
-    def process_adjacent_signal(self, signal_record: SignalAdjacentRecord):
-        """
-        Override to handle adjacent position signals with GlobalBeliefModel.
-        
-        Stores the constraint and enforces it during signature generation.
-        The global consistency algorithm will natively respect this constraint.
-        
-        Args:
-            signal_record: The adjacent signal to process
-        """
-        player_id = signal_record.player_id
-        pos1 = signal_record.position1
-        pos2 = signal_record.position2
-        is_equal = signal_record.is_equal
-        
-        # Store the constraint for use in signature generation
-        # Normalize to always store (smaller_pos, larger_pos)
-        min_pos, max_pos = min(pos1, pos2), max(pos1, pos2)
-        self.adjacent_constraints[(player_id, min_pos, max_pos)] = is_equal
-        
-        # Also apply immediate filtering to beliefs
-        beliefs1 = self.beliefs[player_id][pos1]
-        beliefs2 = self.beliefs[player_id][pos2]
-        
-        if is_equal:
-            # Both positions must have the same value
-            common_values = beliefs1 & beliefs2
-            if common_values:
-                self.beliefs[player_id][pos1] = common_values
-                self.beliefs[player_id][pos2] = common_values
-        else:
-            # Positions have different values - filter if either is certain
-            if len(beliefs2) == 1:
-                certain_value = next(iter(beliefs2))
-                self.beliefs[player_id][pos1] = beliefs1 - {certain_value}
-            if len(beliefs1) == 1:
-                certain_value = next(iter(beliefs1))
-                self.beliefs[player_id][pos2] = beliefs2 - {certain_value}
-        
-        # Run global solver to propagate constraints
-        if self.config.auto_filter:
-            self.apply_filters()
 
     
     def is_consistent(self) -> bool:
@@ -1339,11 +1277,22 @@ class BeliefModel:
         vt_serialized: Dict[str, Dict] = {}
         for val, tracker in self.value_trackers.items():
             vt_serialized[str(val)] = tracker.to_dict()
+            
+        # Serialize constraints
+        copy_count_serialized = {}
+        for (pid, pos), count in self.copy_count_constraints.items():
+            copy_count_serialized[f"{pid}_{pos}"] = count
+            
+        adjacent_serialized = {}
+        for (pid, p1, p2), is_equal in self.adjacent_constraints.items():
+            adjacent_serialized[f"{pid}_{p1}_{p2}"] = is_equal
 
         return {
             "my_player_id": self.my_player_id,
             "beliefs": beliefs_serialized,
             "value_trackers": vt_serialized,
+            "copy_count_constraints": copy_count_serialized,
+            "adjacent_constraints": adjacent_serialized
         }
 
     @classmethod
@@ -1379,6 +1328,21 @@ class BeliefModel:
             # Get total from config
             total = config.wire_distribution.get(val, 0)
             bm.value_trackers[val] = ValueTracker.from_dict(vt_dict, val, total, player_names)
+            
+        # Restore constraints
+        copy_count_data = data.get("copy_count_constraints", {})
+        for key, count in copy_count_data.items():
+            parts = key.split('_')
+            if len(parts) == 2:
+                pid, pos = int(parts[0]), int(parts[1])
+                bm.copy_count_constraints[(pid, pos)] = count
+                
+        adjacent_data = data.get("adjacent_constraints", {})
+        for key, is_equal in adjacent_data.items():
+            parts = key.split('_')
+            if len(parts) == 3:
+                pid, p1, p2 = int(parts[0]), int(parts[1]), int(parts[2])
+                bm.adjacent_constraints[(pid, p1, p2)] = is_equal
 
         return bm
 
@@ -1409,9 +1373,20 @@ class BeliefModel:
             for pos, poss in pos_map.items():
                 beliefs_serialized[player_key][str(pos)] = sorted(list(poss))
         
+        # Serialize constraints
+        copy_count_serialized = {}
+        for (pid, pos), count in self.copy_count_constraints.items():
+            copy_count_serialized[f"{pid}_{pos}"] = count
+            
+        adjacent_serialized = {}
+        for (pid, p1, p2), is_equal in self.adjacent_constraints.items():
+            adjacent_serialized[f"{pid}_{p1}_{p2}"] = is_equal
+        
         belief_data = {
             "my_player_id": self.my_player_id,
             "beliefs": beliefs_serialized,
+            "copy_count_constraints": copy_count_serialized,
+            "adjacent_constraints": adjacent_serialized
         }
         
         if player_names:
@@ -1471,6 +1446,8 @@ class BeliefModel:
             "my_player_id": belief_data["my_player_id"],
             "beliefs": beliefs_dict,
             "value_trackers": vt_data,
+            "copy_count_constraints": belief_data.get("copy_count_constraints", {}),
+            "adjacent_constraints": belief_data.get("adjacent_constraints", {})
         }
         
         return cls.from_dict(combined_data, observation, config, player_names)

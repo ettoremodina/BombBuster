@@ -2,30 +2,82 @@
   "calls": [],
   "double_reveals": [
     [
+      "Frodo",
+      10,
+      14,
+      13
+    ],
+    [
+      "Frodo",
+      9,
+      12,
+      11
+    ],
+    [
+      "Frodo",
+      8,
+      10,
+      9
+    ],
+    [
+      "Frodo",
+      7,
+      8,
+      7
+    ],
+    [
       "Brini",
-      2,
-      17,
-      16
+      6,
+      10,
+      9
     ]
   ],
   "swaps": [],
   "signals": [],
-  "reveals": [
+  "reveals": [],
+  "not_present": [],
+  "has_values": [
     [
-      "Frodo",
-      12,
-      17
+      "Brini",
+      12
     ]
   ],
-  "not_present": [],
-  "has_values": [],
-  "copy_count_signals": [],
-  "adjacent_signals": [
+  "copy_count_signals": [
     [
-      2,
+      1,
       16,
-      15,
-      true
+      3
+    ],
+    [
+      1,
+      16,
+      3
+    ],
+    [
+      1,
+      16,
+      3
+    ],
+    [
+      1,
+      16,
+      3
+    ],
+    [
+      1,
+      16,
+      3
+    ],
+    [
+      1,
+      16,
+      3
+    ],
+    [
+      1,
+      16,
+      3
     ]
-  ]
+  ],
+  "adjacent_signals": []
 }

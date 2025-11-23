@@ -619,6 +619,7 @@ def run_irl_game_session(
     from src.player import Player
     from src.game import Game
     from src.belief.belief_model import BeliefModel
+    from src.belief.global_belief_model import GlobalBeliefModel
     from src.data_structures import GameObservation
     
     if double_reveals is None:
@@ -678,7 +679,10 @@ def run_irl_game_session(
             wire_length=config.wires_per_player
         )
         
-        loaded_belief = BeliefModel.load_from_folder(
+        # Choose class based on config
+        BeliefClass = GlobalBeliefModel if config.use_global_belief else BeliefModel
+        
+        loaded_belief = BeliefClass.load_from_folder(
             str(belief_path),
             my_player_id,
             observation,
@@ -730,38 +734,38 @@ def run_irl_game_session(
             # CRITICAL: Replay old swaps to ensure player's wire is up to date
             # When loading beliefs, we skip processing old actions, so the player's wire 
             # (which is re-initialized from config) would be stale without this replay.
-            old_swaps = old_history.get("swaps", [])
-            if old_swaps:
-                # print(f"Replaying {len(old_swaps)} old swaps to update wire state...")
-                for swap in old_swaps:
-                    try:
-                        internal_swap = convert_swap_to_internal(swap, player_names, my_player_id)
-                        p1, p2, init1, init2, final1, final2, received_value = internal_swap
+            # old_swaps = old_history.get("swaps", [])
+            # if old_swaps:
+            #     # print(f"Replaying {len(old_swaps)} old swaps to update wire state...")
+            #     for swap in old_swaps:
+            #         try:
+            #             internal_swap = convert_swap_to_internal(swap, player_names, my_player_id)
+            #             p1, p2, init1, init2, final1, final2, received_value = internal_swap
                         
-                        # Normalize: In IRL mode, always put the IRL player (my_player_id) as player1
-                        if received_value is not None:
-                            if p2 == my_player_id:
-                                p1, p2 = p2, p1
-                                init1, init2 = init2, init1
-                                final1, final2 = final2, final1
+            #             # Normalize: In IRL mode, always put the IRL player (my_player_id) as player1
+            #             if received_value is not None:
+            #                 if p2 == my_player_id:
+            #                     p1, p2 = p2, p1
+            #                     init1, init2 = init2, init1
+            #                     final1, final2 = final2, final1
                         
-                        # Only update if it affects us (my_player_id)
-                        if p1 == my_player_id:
-                            # Calculate final position logic (same as Game.swap_wires)
-                            final1 = final1 + 1 if final1 >= init1 else final1
+            #             # Only update if it affects us (my_player_id)
+            #             if p1 == my_player_id:
+            #                 # Calculate final position logic (same as Game.swap_wires)
+            #                 final1 = final1 + 1 if final1 >= init1 else final1
                             
-                            player1 = game.players[p1]
+            #                 player1 = game.players[p1]
                             
-                            # We know what we received
-                            value_p1_receives = received_value
+            #                 # We know what we received
+            #                 value_p1_receives = received_value
                             
-                            if value_p1_receives is not None:
-                                # Update wire
-                                player1.wire[init1] = None
-                                player1.wire.insert(final1, value_p1_receives)
-                                player1.wire = [v for v in player1.wire if v is not None]
-                    except Exception as e:
-                        print(f"Error replaying old swap: {e}")
+            #                 if value_p1_receives is not None:
+            #                     # Update wire
+            #                     player1.wire[init1] = None
+            #                     player1.wire.insert(final1, value_p1_receives)
+            #                     player1.wire = [v for v in player1.wire if v is not None]
+            #         except Exception as e:
+            #             print(f"Error replaying old swap: {e}")
     
     # Process all calls, double reveals, swaps, signals, reveals, and not-present announcements
     call_records = []
@@ -918,6 +922,11 @@ def run_irl_game_session(
     
     # Save belief state and action history (only if save_to_json is True)
     my_player = players[my_player_id]
+    
+    # Force a filter application before saving to ensure state is up to date
+    # if my_player.belief_system is not None:
+    #     my_player.belief_system.apply_filters()
+        
     if save_to_json and my_player.belief_system is not None:
         try:
             my_player.belief_system.save_to_folder(belief_folder, player_names)

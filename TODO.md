@@ -6,6 +6,7 @@ The entropy-based suggester is not optimal. It maximizes MY information gain, bu
 ## rimuovi tessere con 99
 
 ## multipliers don't work in the global solver
+- understand how global works and fix it
 
 ## switch solver based on entropy
 

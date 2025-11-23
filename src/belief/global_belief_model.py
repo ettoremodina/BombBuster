@@ -55,6 +55,15 @@ class GlobalBeliefModel(BeliefModel):
         
         # Update value trackers based on new certainties
         self._update_value_trackers()
+        # Save state if playing IRL
+        if self.config.playing_irl:
+            try:
+                # Import here to avoid circular imports
+                from config.game_config import BELIEF_FOLDER, PLAYER_NAMES
+                player_names_dict = {i: name for i, name in enumerate(PLAYER_NAMES)}
+                self.save_to_folder(BELIEF_FOLDER, player_names_dict)
+            except Exception as e:
+                print(f"Warning: Failed to auto-save belief state: {e}")
 
     def _solve_global_consistency(self):
         """

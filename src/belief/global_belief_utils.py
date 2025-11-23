@@ -52,6 +52,14 @@ def generate_signatures_worker(
                         if not is_equal and val1 == val2:
                             return  # Constraint violated
             
+            # Check copy count constraints
+            for (pid, p), req_count in copy_count_constraints.items():
+                if pid == player_id:
+                    val = current_hand[p]
+                    v_idx = val_to_idx[val]
+                    if current_counts.get(v_idx, 0) != req_count:
+                        return
+
             # Convert counts to signature vector
             sig = [0] * K
             for v_idx, count in current_counts.items():
@@ -65,12 +73,6 @@ def generate_signatures_worker(
         # Count must not exceed global total
         
         possible_values = player_beliefs[pos]
-        
-        # Check copy count constraint for this position
-        if (player_id, pos) in copy_count_constraints:
-            required_copies = copy_count_constraints[(player_id, pos)]
-            # Filter possible values to only those with required copy count
-            possible_values = {v for v in possible_values if wire_distribution[v] == required_copies}
         
         # Iterate through sorted values starting from min_val_idx
         for v_idx in range(min_val_idx, K):
