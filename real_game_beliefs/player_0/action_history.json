@@ -1,11 +1,31 @@
 {
   "calls": [],
-  "double_reveals": [],
+  "double_reveals": [
+    [
+      "Brini",
+      2,
+      17,
+      16
+    ]
+  ],
   "swaps": [],
   "signals": [],
-  "reveals": [],
+  "reveals": [
+    [
+      "Frodo",
+      12,
+      17
+    ]
+  ],
   "not_present": [],
   "has_values": [],
   "copy_count_signals": [],
-  "adjacent_signals": []
+  "adjacent_signals": [
+    [
+      2,
+      16,
+      15,
+      true
+    ]
+  ]
 }

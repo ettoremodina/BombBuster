@@ -9,6 +9,7 @@ from src.player import Player
 from src.game import Game
 from src.statistics import GameStatistics
 from config.game_config import PLAYER_NAMES
+from src.utils import find_first_unrevealed_position
 
 
 class SmartestAgent(BaseAgent):

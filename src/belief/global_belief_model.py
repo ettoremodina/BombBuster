@@ -40,14 +40,6 @@ class GlobalBeliefModel(BeliefModel):
             total_deck[self.val_to_idx[v]] = config.get_copies(v)
         self.total_deck = tuple(total_deck)
         
-        # Constraint tracking for copy count signals
-        # Key: (player_id, position), Value: required copy count (1, 2, or 3)
-        self.copy_count_constraints: Dict[Tuple[int, int], int] = {}
-        
-        # Constraint tracking for adjacent signals
-        # Key: (player_id, pos1, pos2), Value: is_equal (True if same, False if different)
-        self.adjacent_constraints: Dict[Tuple[int, int, int], bool] = {}
-        
         # Cache for signatures
         # Key: (player_id, belief_hash, constraint_hash) -> Set[Tuple[int, ...]]
         self._signature_cache = {}
@@ -220,77 +212,6 @@ class GlobalBeliefModel(BeliefModel):
         
         return (player_id, beliefs_tuple, cc_constraints, adj_constraints, mc_tuple)
 
-    
-    def process_copy_count_signal(self, signal_record: SignalCopyCountRecord):
-        """
-        Override to handle copy count signals with GlobalBeliefModel.
-        
-        Stores the constraint and enforces it during signature generation.
-        The global consistency algorithm will natively respect this constraint.
-        
-        Args:
-            signal_record: The copy count signal to process
-        """
-        player_id = signal_record.player_id
-        position = signal_record.position
-        copy_count = signal_record.copy_count
-        
-        # Store the constraint for use in signature generation
-        self.copy_count_constraints[(player_id, position)] = copy_count
-        
-        # Also apply immediate filtering to beliefs
-        current_beliefs = self.beliefs[player_id][position]
-        filtered_beliefs = {v for v in current_beliefs if self.config.wire_distribution[v] == copy_count}
-        
-        if filtered_beliefs:
-            self.beliefs[player_id][position] = filtered_beliefs
-        
-        # Run global solver to propagate constraints
-        if self.config.auto_filter:
-            self.apply_filters()
-    
-    def process_adjacent_signal(self, signal_record: SignalAdjacentRecord):
-        """
-        Override to handle adjacent position signals with GlobalBeliefModel.
-        
-        Stores the constraint and enforces it during signature generation.
-        The global consistency algorithm will natively respect this constraint.
-        
-        Args:
-            signal_record: The adjacent signal to process
-        """
-        player_id = signal_record.player_id
-        pos1 = signal_record.position1
-        pos2 = signal_record.position2
-        is_equal = signal_record.is_equal
-        
-        # Store the constraint for use in signature generation
-        # Normalize to always store (smaller_pos, larger_pos)
-        min_pos, max_pos = min(pos1, pos2), max(pos1, pos2)
-        self.adjacent_constraints[(player_id, min_pos, max_pos)] = is_equal
-        
-        # Also apply immediate filtering to beliefs
-        beliefs1 = self.beliefs[player_id][pos1]
-        beliefs2 = self.beliefs[player_id][pos2]
-        
-        if is_equal:
-            # Both positions must have the same value
-            common_values = beliefs1 & beliefs2
-            if common_values:
-                self.beliefs[player_id][pos1] = common_values
-                self.beliefs[player_id][pos2] = common_values
-        else:
-            # Positions have different values - filter if either is certain
-            if len(beliefs2) == 1:
-                certain_value = next(iter(beliefs2))
-                self.beliefs[player_id][pos1] = beliefs1 - {certain_value}
-            if len(beliefs1) == 1:
-                certain_value = next(iter(beliefs1))
-                self.beliefs[player_id][pos2] = beliefs2 - {certain_value}
-        
-        # Run global solver to propagate constraints
-        if self.config.auto_filter:
-            self.apply_filters()
 
     def clone(self) -> 'GlobalBeliefModel':
         """

@@ -4,7 +4,7 @@ A simple, click-based interface for recording game actions without typing.
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
+from tkinter import ttk, messagebox
 from typing import Dict, List, Optional, Tuple, Union
 from pathlib import Path
 
@@ -319,8 +319,6 @@ class BombBusterGUI:
             bg_color = "white"
             border_width = 2
             border_color = "black"
-            font = ("Arial", 12, "bold")
-            opacity = 1.0  # For visual feedback
             
             # Check if this position is currently selected
             is_selected = False
@@ -624,25 +622,6 @@ class ActionPanel(tk.Frame):
                                command=lambda k=key, p=pid: self.select_player(k, p))
             btn.pack(side=tk.LEFT, padx=2)
     
-    def create_position_buttons(self, parent, label, key):
-        """Create position selection buttons."""
-        frame = tk.Frame(parent, bg="#FFF3E0", padx=5, pady=5, relief=tk.GROOVE, borderwidth=1)
-        frame.pack(fill=tk.X, pady=5, padx=5)
-        
-        tk.Label(frame, text=label, anchor=tk.W, bg="#FFF3E0", font=("Arial", 10, "bold")).pack()
-        
-        button_frame = tk.Frame(frame, bg="#FFF3E0")
-        button_frame.pack(fill=tk.X, pady=(5, 0))
-        
-        self.vars[key] = tk.IntVar(value=-1)
-        
-        for pos in range(self.app.config.wires_per_player):
-            btn = tk.Radiobutton(button_frame, text=str(pos + 1), width=4,
-                               variable=self.vars[key], value=pos,
-                               indicatoron=0, bg="white", selectcolor="#F5A623",
-                               font=("Arial", 9, "bold"),
-                               command=lambda k=key, p=pos: self.select_position(k, p))
-            btn.pack(side=tk.LEFT, padx=2)
     
     def create_value_buttons(self, parent, label, key):
         """Create value selection buttons."""

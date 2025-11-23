@@ -56,21 +56,7 @@ class Player:
         self.config = config
         self.revealed_positions: Dict[int, Union[int, float]] = {}
         self.belief_system: Optional[BeliefModel] = None  # Initialized by Game
-        
-        # Initialize revealed positions (game-specific logic)
-        self._initialize_certain_positions()
     
-    def _initialize_certain_positions(self):
-        """
-        Change the belief system by making certain the wires that the player owns.
-        For real-life play, this is populated as positions are revealed during gameplay.
-        """
-        # This will be called after belief_system is initialized by Game
-        # For now, just initialize revealed_positions if wire is available
-        if self.wire is not None:
-            # In simulation mode, we could optionally reveal some positions
-            # For now, keep all positions hidden (they'll be revealed through gameplay)
-            pass
     
     def has_value(self, value: int) -> bool:
         """
@@ -88,27 +74,6 @@ class Player:
         if self.wire is None:
             raise ValueError("Wire not available (real-life mode). Players track their own values.")
         return value in self.wire
-    
-    def get_value_at_position(self, position: int) -> Optional[int]:
-        """
-        Get the actual value at a specific position (private information).
-        
-        NOTE: Only works if wire is provided (simulation mode).
-        For real-life play, this returns None.
-        
-        Args:
-            position: Wire position to check
-        
-        Returns:
-            The value at this position, or None if wire not provided
-        """
-        if self.wire is None:
-            return None
-        
-        if position < 0 or position >= len(self.wire):
-            raise ValueError(f"Position {position} out of range [0, {len(self.wire)-1}]")
-        
-        return self.wire[position]
     
     def has_won(self) -> bool:
         """

@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, Union, Tuple
 from src.data_structures import CallRecord, DoubleRevealRecord, SwapRecord, SignalRecord, NotPresentRecord, SignalCopyCountRecord, SignalAdjacentRecord, GameObservation
 from src.player import Player
 from config.game_config import GameConfig
+from src.utils import find_first_unrevealed_position
 
 
 class Game:
@@ -329,20 +330,7 @@ class Game:
         caller_position = None
         if success:
             # Find where caller has this value (first unrevealed position)
-            value_tracker = caller_player.belief_system.value_trackers.get(value)
-            for i, v in enumerate(caller_player.wire):
-                if v == value:
-                    # Check if this position is not revealed
-                    is_revealed = False
-                    if value_tracker:
-                        for revealed_pid, revealed_pos in value_tracker.revealed:
-                            if revealed_pid == caller_id and revealed_pos == i:
-                                is_revealed = True
-                                break
-                    
-                    if not is_revealed:
-                        caller_position = i
-                        break 
+            caller_position = find_first_unrevealed_position(caller_player, value) 
                 
         return self.make_call(caller_id, target_id, position, value, success, caller_position)
     

@@ -95,8 +95,6 @@ if USE_VOID_PLAYER:
 WIRE_VALUES = sorted(WIRE_DISTRIBUTION.keys())  # All unique values
 K = len(WIRE_VALUES)                             # Number of distinct wire values
 TOTAL_WIRES = sum(WIRE_DISTRIBUTION.values())   # Total number of wires
-NUM_PLAYERS = N
-WIRES_PER_PLAYER = TOTAL_WIRES // N
 
 # Game rules
 MAX_WRONG_CALLS = 1000      # Team loses if they make this many wrong calls
@@ -144,7 +142,7 @@ class GameConfig:
         self.wires_per_player = self.total_wires // n_players
         
         # For backwards compatibility (deprecated - use wire_distribution instead)
-        self.r_k = None  # No longer a single value
+        # self.r_k = None  # No longer a single value
         
         # Validate configuration
         self._validate()

@@ -11,6 +11,41 @@ from config.game_config import GameConfig, USE_VOID_PLAYER, EXTRA_UNCERTAIN_WIRE
 from src.statistics import GameStatistics
 
 
+def find_first_unrevealed_position(player, value: Union[int, float]) -> Optional[int]:
+    """
+    Find the first position in the player's wire that contains the given value
+    and has not been revealed yet.
+    
+    Args:
+        player: The Player object
+        value: The value to search for
+        
+    Returns:
+        The index of the first unrevealed position with the value, or None if not found.
+    """
+    if player.wire is None:
+        return None
+        
+    value_tracker = None
+    if hasattr(player, 'belief_system') and player.belief_system is not None:
+        value_tracker = player.belief_system.value_trackers.get(value)
+    
+    for pos, val in enumerate(player.wire):
+        if val == value:
+            # Check if this position is revealed
+            is_revealed = False
+            if value_tracker:
+                for revealed_pid, revealed_pos in value_tracker.revealed:
+                    if revealed_pid == player.player_id and revealed_pos == pos:
+                        is_revealed = True
+                        break
+            
+            if not is_revealed:
+                return pos
+                
+    return None
+
+
 def generate_wires(config: GameConfig, seed: int = None) -> List[List[Union[int, float]]]:
     """
     Generate wires for all players.
@@ -123,7 +158,54 @@ def print_all_wires(wires: List[List[Union[int, float]]]):
 
 
 # ============================================================================
-# IRL Gameplay Utilities
+# IRL Gameplay Utilities - Helper Functions
+# ============================================================================
+
+def _parse_player_id(player_identifier: Union[str, int], player_names: Dict[int, str] = None) -> int:
+    """
+    Convert player name or ID to integer ID.
+    
+    Args:
+        player_identifier: Player name (str) or ID (int)
+        player_names: Optional dict mapping IDs to names
+        
+    Returns:
+        Integer player ID
+    """
+    if isinstance(player_identifier, int):
+        return player_identifier
+    
+    # Create reverse mapping (name -> ID) if needed
+    if player_names:
+        name_to_id = {name: pid for pid, name in player_names.items()}
+        if player_identifier in name_to_id:
+            return name_to_id[player_identifier]
+    
+    # Try to parse as integer
+    try:
+        return int(player_identifier)
+    except ValueError:
+        raise ValueError(f"Invalid player identifier: {player_identifier}. Must be player name or ID.")
+
+
+def _get_player_name(player_id: int, player_names: Dict[int, str] = None) -> str:
+    """
+    Get player name from ID, or fallback to 'Player X' format.
+    
+    Args:
+        player_id: Player ID
+        player_names: Optional dict mapping IDs to names
+        
+    Returns:
+        Player name string
+    """
+    if player_names:
+        return player_names.get(player_id, f"Player {player_id}")
+    return f"Player {player_id}"
+
+
+# ============================================================================
+# IRL Gameplay Utilities - Conversion Functions
 # ============================================================================
 
 def convert_call_to_internal(call: Tuple, player_names: Dict[int, str] = None) -> Tuple:
@@ -152,29 +234,9 @@ def convert_call_to_internal(call: Tuple, player_names: Dict[int, str] = None) -
     else:
         raise ValueError(f"Call tuple must have 5 or 6 elements, got {len(call)}")
     
-    # Create reverse mapping (name -> ID) if needed
-    name_to_id = {}
-    if player_names:
-        name_to_id = {name: pid for pid, name in player_names.items()}
-    
-    # Convert names to IDs if needed
-    if isinstance(caller, str):
-        if caller in name_to_id:
-            caller = name_to_id[caller]
-        else:
-            try:
-                caller = int(caller)
-            except ValueError:
-                raise ValueError(f"Invalid caller: {caller}. Must be player name or ID.")
-    
-    if isinstance(target, str):
-        if target in name_to_id:
-            target = name_to_id[target]
-        else:
-            try:
-                target = int(target)
-            except ValueError:
-                raise ValueError(f"Invalid target: {target}. Must be player name or ID.")
+    # Convert names to IDs
+    caller_id = _parse_player_id(caller, player_names)
+    target_id = _parse_player_id(target, player_names)
     
     # Convert position from 1-indexed to 0-indexed
     position_internal = position - 1
@@ -184,7 +246,7 @@ def convert_call_to_internal(call: Tuple, player_names: Dict[int, str] = None) -
     if caller_position is not None:
         caller_position_internal = caller_position - 1
     
-    return (int(caller), int(target), position_internal, value, success, caller_position_internal)
+    return (caller_id, target_id, position_internal, value, success, caller_position_internal)
 
 
 def convert_double_reveal_to_internal(reveal: Tuple, player_names: Dict[int, str] = None) -> Tuple:
@@ -203,26 +265,11 @@ def convert_double_reveal_to_internal(reveal: Tuple, player_names: Dict[int, str
     """
     player, value, position1, position2 = reveal
     
-    # Create reverse mapping (name -> ID) if needed
-    name_to_id = {}
-    if player_names:
-        name_to_id = {name: pid for pid, name in player_names.items()}
-    
-    # Convert name to ID if needed
-    if isinstance(player, str):
-        if player in name_to_id:
-            player = name_to_id[player]
-        else:
-            try:
-                player = int(player)
-            except ValueError:
-                raise ValueError(f"Invalid player: {player}. Must be player name or ID.")
+    # Convert name to ID
+    player_id = _parse_player_id(player, player_names)
     
     # Convert positions from 1-indexed to 0-indexed
-    pos1_internal = position1 - 1
-    pos2_internal = position2 - 1
-    
-    return (int(player), value, pos1_internal, pos2_internal)
+    return (player_id, value, position1 - 1, position2 - 1)
 
 
 def format_double_reveal_for_user(reveal_record, player_names: Dict[int, str] = None) -> str:
@@ -236,15 +283,9 @@ def format_double_reveal_for_user(reveal_record, player_names: Dict[int, str] = 
     Returns:
         Formatted string
     """
-    if player_names:
-        player_name = player_names.get(reveal_record.player_id, f"Player {reveal_record.player_id}")
-    else:
-        player_name = f"Player {reveal_record.player_id}"
-    
-    # Convert positions to 1-indexed
+    player_name = _get_player_name(reveal_record.player_id, player_names)
     pos1_display = reveal_record.position1 + 1
     pos2_display = reveal_record.position2 + 1
-    
     return f"{player_name} DOUBLE REVEAL positions {pos1_display} and {pos2_display} = {reveal_record.value}"
 
 
@@ -263,26 +304,8 @@ def convert_signal_to_internal(signal: Tuple, player_names: Dict[int, str] = Non
         Tuple of (player_id, value, position_0indexed)
     """
     player, value, position = signal
-    
-    # Create reverse mapping (name -> ID) if needed
-    name_to_id = {}
-    if player_names:
-        name_to_id = {name: pid for pid, name in player_names.items()}
-    
-    # Convert name to ID if needed
-    if isinstance(player, str):
-        if player in name_to_id:
-            player = name_to_id[player]
-        else:
-            try:
-                player = int(player)
-            except ValueError:
-                raise ValueError(f"Invalid player: {player}. Must be player name or ID.")
-    
-    # Convert position from 1-indexed to 0-indexed
-    pos_internal = position - 1
-    
-    return (int(player), value, pos_internal)
+    player_id = _parse_player_id(player, player_names)
+    return (player_id, value, position - 1)
 
 
 def format_signal_for_user(signal_record, player_names: Dict[int, str] = None) -> str:
@@ -296,14 +319,8 @@ def format_signal_for_user(signal_record, player_names: Dict[int, str] = None) -
     Returns:
         Formatted string
     """
-    if player_names:
-        player_name = player_names.get(signal_record.player_id, f"Player {signal_record.player_id}")
-    else:
-        player_name = f"Player {signal_record.player_id}"
-    
-    # Convert position to 1-indexed
+    player_name = _get_player_name(signal_record.player_id, player_names)
     pos_display = signal_record.position + 1
-    
     return f"{player_name} SIGNALS position {pos_display} = {signal_record.value}"
 
 
@@ -320,29 +337,15 @@ def convert_not_present_to_internal(not_present: Tuple, player_names: Dict[int, 
     Returns:
         Tuple of (player_id, value, position_0indexed)
     """
-    position = None
     if len(not_present) == 3:
         player, value, pos_1based = not_present
         position = pos_1based - 1
     else:
         player, value = not_present
+        position = None
     
-    # Create reverse mapping (name -> ID) if needed
-    name_to_id = {}
-    if player_names:
-        name_to_id = {name: pid for pid, name in player_names.items()}
-    
-    # Convert name to ID if needed
-    if isinstance(player, str):
-        if player in name_to_id:
-            player = name_to_id[player]
-        else:
-            try:
-                player = int(player)
-            except ValueError:
-                raise ValueError(f"Invalid player: {player}. Must be player name or ID.")
-    
-    return (int(player), value, position)
+    player_id = _parse_player_id(player, player_names)
+    return (player_id, value, position)
 
 
 def format_not_present_for_user(not_present_record, player_names: Dict[int, str] = None) -> str:
@@ -356,10 +359,7 @@ def format_not_present_for_user(not_present_record, player_names: Dict[int, str]
     Returns:
         Formatted string
     """
-    if player_names:
-        player_name = player_names.get(not_present_record.player_id, f"Player {not_present_record.player_id}")
-    else:
-        player_name = f"Player {not_present_record.player_id}"
+    player_name = _get_player_name(not_present_record.player_id, player_names)
     
     if not_present_record.position is not None:
         return f"{player_name} DOES NOT HAVE value {not_present_record.value} at pos {not_present_record.position + 1}"
@@ -379,23 +379,8 @@ def convert_has_value_to_internal(has_value: Tuple, player_names: Dict[int, str]
         Tuple of (player_id, value)
     """
     player, value = has_value
-    
-    # Create reverse mapping (name -> ID) if needed
-    name_to_id = {}
-    if player_names:
-        name_to_id = {name: pid for pid, name in player_names.items()}
-    
-    # Convert name to ID if needed
-    if isinstance(player, str):
-        if player in name_to_id:
-            player = name_to_id[player]
-        else:
-            try:
-                player = int(player)
-            except ValueError:
-                raise ValueError(f"Invalid player: {player}. Must be player name or ID.")
-    
-    return (int(player), value)
+    player_id = _parse_player_id(player, player_names)
+    return (player_id, value)
 
 
 def format_has_value_for_user(player_id: int, value: Union[int, float], player_names: Dict[int, str] = None) -> str:
@@ -410,11 +395,7 @@ def format_has_value_for_user(player_id: int, value: Union[int, float], player_n
     Returns:
         Formatted string
     """
-    if player_names:
-        player_name = player_names.get(player_id, f"Player {player_id}")
-    else:
-        player_name = f"Player {player_id}"
-    
+    player_name = _get_player_name(player_id, player_names)
     return f"{player_name} HAS value {value}"
 
 
@@ -445,46 +426,21 @@ def convert_swap_to_internal(swap: Tuple, player_names: Dict[int, str] = None, m
     else:
         raise ValueError(f"Swap tuple must have 6 or 7 elements, got {len(swap)}")
     
-    # Create reverse mapping (name -> ID) if needed
-    name_to_id = {}
-    if player_names:
-        name_to_id = {name: pid for pid, name in player_names.items()}
-    
-    # Convert names to IDs if needed
-    if isinstance(player1, str):
-        if player1 in name_to_id:
-            player1 = name_to_id[player1]
-        else:
-            try:
-                player1 = int(player1)
-            except ValueError:
-                raise ValueError(f"Invalid player1: {player1}. Must be player name or ID.")
-    
-    if isinstance(player2, str):
-        if player2 in name_to_id:
-            player2 = name_to_id[player2]
-        else:
-            try:
-                player2 = int(player2)
-            except ValueError:
-                raise ValueError(f"Invalid player2: {player2}. Must be player name or ID.")
+    # Convert names to IDs
+    player1_id = _parse_player_id(player1, player_names)
+    player2_id = _parse_player_id(player2, player_names)
     
     # Validate received_value is provided when IRL player is involved
     if my_player_id is not None and received_value is None:
-        if int(player1) == my_player_id or int(player2) == my_player_id:
+        if player1_id == my_player_id or player2_id == my_player_id:
             raise ValueError(
                 f"received_value is required when you (Player {my_player_id}) are involved in a swap. "
                 f"Format: (player1, player2, init_pos1, init_pos2, final_pos1, final_pos2, received_value)"
             )
     
     # Convert positions from 1-indexed to 0-indexed
-    init_pos1_internal = init_pos1 - 1
-    init_pos2_internal = init_pos2 - 1
-    final_pos1_internal = final_pos1 - 1
-    final_pos2_internal = final_pos2 - 1
-    
-    return (int(player1), int(player2), init_pos1_internal, init_pos2_internal,
-            final_pos1_internal, final_pos2_internal, received_value)
+    return (player1_id, player2_id, init_pos1 - 1, init_pos2 - 1,
+            final_pos1 - 1, final_pos2 - 1, received_value)
 
 
 def format_swap_for_user(swap_record, player_names: Dict[int, str] = None) -> str:
@@ -498,21 +454,16 @@ def format_swap_for_user(swap_record, player_names: Dict[int, str] = None) -> st
     Returns:
         Formatted string
     """
-    if player_names:
-        p1_name = player_names.get(swap_record.player1_id, f"Player {swap_record.player1_id}")
-        p2_name = player_names.get(swap_record.player2_id, f"Player {swap_record.player2_id}")
-    else:
-        p1_name = f"Player {swap_record.player1_id}"
-        p2_name = f"Player {swap_record.player2_id}"
+    p1_name = _get_player_name(swap_record.player1_id, player_names)
+    p2_name = _get_player_name(swap_record.player2_id, player_names)
     
     # Convert positions to 1-indexed
-    p1_init_display = swap_record.player1_init_pos + 1
-    p2_init_display = swap_record.player2_init_pos + 1
-    p1_final_display = swap_record.player1_final_pos + 1
-    p2_final_display = swap_record.player2_final_pos + 1
+    p1_init = swap_record.player1_init_pos + 1
+    p2_init = swap_record.player2_init_pos + 1
+    p1_final = swap_record.player1_final_pos + 1
+    p2_final = swap_record.player2_final_pos + 1
     
-    return (f"{p1_name}[{p1_init_display}→{p1_final_display}] ↔ "
-            f"{p2_name}[{p2_init_display}→{p2_final_display}]")
+    return f"{p1_name}[{p1_init}→{p1_final}] ↔ {p2_name}[{p2_init}→{p2_final}]"
 
 
 def format_call_for_user(call_record, player_names: Dict[int, str] = None) -> str:
@@ -526,16 +477,9 @@ def format_call_for_user(call_record, player_names: Dict[int, str] = None) -> st
     Returns:
         Formatted string
     """
-    if player_names:
-        caller_name = player_names.get(call_record.caller_id, f"Player {call_record.caller_id}")
-        target_name = player_names.get(call_record.target_id, f"Player {call_record.target_id}")
-    else:
-        caller_name = f"Player {call_record.caller_id}"
-        target_name = f"Player {call_record.target_id}"
-    
-    # Convert position to 1-indexed
+    caller_name = _get_player_name(call_record.caller_id, player_names)
+    target_name = _get_player_name(call_record.target_id, player_names)
     position_user = call_record.position + 1
-    
     result = "SUCCESS" if call_record.success else "FAIL"
     return f"{caller_name} → {target_name}[{position_user}] = {call_record.value} [{result}]"
 
@@ -1129,4 +1073,5 @@ def print_session_complete(belief_folder: str):
     print(f"\n💡 Tip: Your belief state is saved in {belief_folder}/")
     print("   You can manually edit the JSON files to adjust beliefs")
     print("   The script will load from saved state on next run\n")
+
 
