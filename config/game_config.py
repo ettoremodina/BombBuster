@@ -2,7 +2,7 @@
 Game configuration parameters for BombBuster.
 Defines the wire distribution, number of players, and game constraints.
 """
-USE_GLOBAL_BELIEF = True # Use the new global belief model (True) or the old one (False)
+USE_GLOBAL_BELIEF = False # Use the new global belief model (True) or the old one (False)
 
 # Format: {value: number_of_copies}
 WIRE_DISTRIBUTION = {
@@ -19,7 +19,7 @@ EXTRA_UNCERTAIN_WIRES = {
 }
 # Your player configuration
 # MY_WIRE = list(range(1,13))+list(range(1,6))
-MY_WIRE = [1,2,3,5,7,8,8,8.5,9,10,10,11,12]
+MY_WIRE = [1,1,1,1,2,2,3,4,7,8,8,8.5,9,10,10,11,12]
 
 # Player names (in order by player ID)
 PLAYER_NAMES = [

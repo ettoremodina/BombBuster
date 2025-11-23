@@ -1627,6 +1627,56 @@ class SuggesterPanel(tk.Frame):
         # Refresh display
         self.refresh()
     
+    def _display_last_remaining_wires_info(self, current_wire):
+        """Display info box if player has the last remaining wires for any value."""
+        belief_system = self.app.my_player.belief_system
+        my_player_id = self.app.my_player.player_id
+        
+        # Find values where uncertain == 0 and all non-revealed are in my hand
+        last_remaining_values = []
+        
+        for value, tracker in belief_system.value_trackers.items():
+            if tracker.uncertain == 0:
+                # Get all non-revealed positions with this value
+                non_revealed_positions = []
+                
+                # Check certain positions (not yet revealed)
+                for player_id, position in tracker.certain:
+                    if (player_id, position) not in tracker.revealed:
+                        non_revealed_positions.append((player_id, position))
+                
+                # Check if all non-revealed positions are in my hand
+                if non_revealed_positions:
+                    all_in_my_hand = all(player_id == my_player_id for player_id, _ in non_revealed_positions)
+                    
+                    if all_in_my_hand:
+                        # Get my positions with this value
+                        my_positions = [pos for pid, pos in non_revealed_positions if pid == my_player_id]
+                        last_remaining_values.append((value, my_positions))
+        
+        # Display info box if any values found
+        if last_remaining_values:
+            info_frame = tk.Frame(self.content_frame, bg="#FFFDE7", padx=15, pady=15, 
+                                 relief=tk.RAISED, borderwidth=3)
+            info_frame.pack(fill=tk.X, padx=10, pady=10)
+            
+            tk.Label(info_frame, text="⚠️ LAST REMAINING WIRES IN YOUR HAND", 
+                    font=("Arial", 13, "bold"), bg="#FFFDE7", fg="#F57F17").pack(anchor="w", pady=(0, 10))
+            
+            for value, positions in last_remaining_values:
+                positions_str = ", ".join([str(p+1) for p in positions])
+                text = f"Value {value}: Position(s) {positions_str}"
+                
+                item_frame = tk.Frame(info_frame, bg="white", padx=10, pady=5, 
+                                     relief=tk.GROOVE, borderwidth=1)
+                item_frame.pack(fill=tk.X, pady=2)
+                
+                tk.Label(item_frame, text=text, font=("Arial", 11), bg="white", 
+                        anchor="w").pack(fill=tk.X)
+            
+            tk.Label(info_frame, text="ℹ️ These are the last unrevealed copies - consider revealing them!", 
+                    font=("Arial", 9, "italic"), bg="#FFFDE7", fg="#666666").pack(pady=(10, 0))
+    
     def run_entropy_analysis(self, max_uncertainty=MAX_UNCERTAINTY, use_parallel=True):
         """Run entropy-based call suggester and highlight the best call."""
         if not self.app.my_player or not self.app.my_player.belief_system:
@@ -1845,6 +1895,9 @@ class SuggesterPanel(tk.Frame):
         # The player's wire changes after swaps!
         current_wire = self.app.my_player.get_wire()
         stats = GameStatistics(self.app.my_player.belief_system, self.app.config, current_wire)
+        
+        # Check for last remaining wires in my hand
+        self._display_last_remaining_wires_info(current_wire)
         
         # Get suggestions (now filtered in statistics.py)
         suggestions = stats.get_all_call_suggestions()

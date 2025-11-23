@@ -5,25 +5,7 @@
   "signals": [],
   "reveals": [],
   "not_present": [],
-  "has_values": [
-    [
-      "Brini",
-      1
-    ]
-  ],
-  "copy_count_signals": [
-    [
-      1,
-      0,
-      3
-    ]
-  ],
-  "adjacent_signals": [
-    [
-      1,
-      0,
-      1,
-      true
-    ]
-  ]
+  "has_values": [],
+  "copy_count_signals": [],
+  "adjacent_signals": []
 }
