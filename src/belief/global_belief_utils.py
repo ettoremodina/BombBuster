@@ -1,4 +1,4 @@
-from typing import Dict, Set, List, Tuple, Optional
+from typing import Dict, Set, List, Tuple, Optional, Union
 import collections
 
 def generate_signatures_worker(

@@ -3,8 +3,15 @@ The entropy-based suggester is not optimal. It maximizes MY information gain, bu
 
 # TO DO
 
+## avvisa se hai 2 rimanenti e aggiungi ad autoplay
+## rimuovi tessere con 99
+
+## multipliers don't work
+
 ## switch solver based on entropy
 
+## advance autoplay
+- if the previous player uses a double chance, than I can extract information from that
 
 ## CHECK ALL FILTERS INDIVIDUALLY
 - _apply_subset_cardinality_filter (difficult to test)

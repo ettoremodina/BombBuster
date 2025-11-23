@@ -30,8 +30,9 @@ class SmartestAgent(BaseAgent):
             player: The Player object to control
         """
         super().__init__(player, name="SmartestAgent")
+        self.used_double_chance = False  # Track if double chance has been used
     
-    def choose_action(self, game: Game) -> Optional[Tuple[int, int, int]]:
+    def choose_action(self, game: Game) -> Optional[Tuple]:
         """
         Choose the best action based on entropy analysis.
         
@@ -39,11 +40,52 @@ class SmartestAgent(BaseAgent):
             game: Current game state
         
         Returns:
-            Tuple of (target_id, position, value) or None if no valid calls
+            Tuple of (target_id, position, value) for normal calls
+            Tuple of ('double_chance', target_id, position1, position2, value) for double chance
+            Tuple of ('double_reveal', position1, position2, value) for double reveal
+            or None if no valid calls
         """
         # Initialize statistics helper
         stats = GameStatistics(self.player.belief_system, game.config, self.player.wire)
 
+        # 0. Check for last remaining wires (can do double reveal)
+        value_trackers = self.player.belief_system.value_trackers
+        for value in game.config.wire_values:
+            if value not in value_trackers:
+                continue
+            
+            tracker = value_trackers[value]
+            total_copies = game.config.get_copies(value)
+            revealed_count = len(tracker.revealed)
+            
+            # Count how many of this value I have
+            my_count = 0
+            my_positions = []
+            for pos, val in enumerate(self.player.wire):
+                if val == value:
+                    # Check if this position is not already revealed
+                    is_revealed = False
+                    for revealed_pid, revealed_pos in tracker.revealed:
+                        if revealed_pid == self.player.player_id and revealed_pos == pos:
+                            is_revealed = True
+                            break
+                    
+                    if not is_revealed:
+                        my_count += 1
+                        my_positions.append(pos)
+            
+            # Check if I have the last remaining wires for this value
+            if my_count + revealed_count == total_copies and my_count >= 2:
+                print(f"Agent {self.player.player_id} has last {my_count} copies of value {value}!")
+                
+                if my_count == 2:
+                    # Do a single double reveal
+                    return ('double_reveal', my_positions[0], my_positions[1], value)
+                elif my_count == 4:
+                    # Do both double reveals in the same turn
+                    return ('double_reveal_quad', my_positions[0], my_positions[1], my_positions[2], my_positions[3], value)
+                # Note: my_count == 3 shouldn't happen (can only reveal pairs)
+        
         # 1. Get playable values (values I have that are not revealed)
         playable_values = list(stats.get_playable_values())
         if not playable_values:
@@ -82,7 +124,27 @@ class SmartestAgent(BaseAgent):
         if certain_calls:
             # Prioritize certain calls
             return random.choice(certain_calls)
-
+        
+        # 3b. Check for double chance if not used yet
+        if not self.used_double_chance:
+            print(f"Agent {self.player.player_id} checking for DOUBLE CHANCE opportunity...")
+            double_chance_suggestions = stats.get_double_chance_suggestions()
+            if double_chance_suggestions:
+                # Get best double chance (first one, already sorted by probability)
+                best_dc = double_chance_suggestions[0]
+                self.used_double_chance = True
+                target_id = best_dc['target_id']
+                pos1, pos2 = best_dc['positions']
+                value = best_dc['value']
+                
+                # Skip VOID player
+                if target_id < len(PLAYER_NAMES) and PLAYER_NAMES[target_id] == "VOID":
+                    pass  # Fall through to entropy suggestion
+                else:
+                    print(f"Agent {self.player.player_id} using DOUBLE CHANCE: P{target_id}[{pos1},{pos2}]={value} (prob: {best_dc['probability']:.1%})")
+                    return ('double_chance', target_id, pos1, pos2, value)
+                
+        print(f"Agent {self.player.player_id} using ENTROPY analysis for best call...")
         suggestion = stats.get_entropy_suggestion(max_uncertainty=3, use_parallel=True)
         
         best_call = suggestion.get('best_call')

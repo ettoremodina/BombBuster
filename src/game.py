@@ -165,8 +165,8 @@ class Game:
         self.call_history.append(call_record)
         
         # Update wrong calls count if unsuccessful
-        if not success:
-            self.wrong_calls_count += 1
+        # if not success:
+        #     self.wrong_calls_count += 1
         
         # Broadcast to all players
         self._broadcast_call(call_record)
@@ -328,14 +328,21 @@ class Game:
         # Determine caller_position if successful
         caller_position = None
         if success:
-            # Find where caller has this value
-            # Simple strategy: find first index of value in caller's wire
-            try:
-                indices = [i for i, v in enumerate(caller_player.wire) if v == value]
-                if indices:
-                    caller_position = indices[0]
-            except ValueError:
-                pass 
+            # Find where caller has this value (first unrevealed position)
+            value_tracker = caller_player.belief_system.value_trackers.get(value)
+            for i, v in enumerate(caller_player.wire):
+                if v == value:
+                    # Check if this position is not revealed
+                    is_revealed = False
+                    if value_tracker:
+                        for revealed_pid, revealed_pos in value_tracker.revealed:
+                            if revealed_pid == caller_id and revealed_pos == i:
+                                is_revealed = True
+                                break
+                    
+                    if not is_revealed:
+                        caller_position = i
+                        break 
                 
         return self.make_call(caller_id, target_id, position, value, success, caller_position)
     
@@ -777,16 +784,16 @@ class Game:
             if player.wire[position2] != value:
                 raise ValueError(f"Player {player_id} does not have value {value} at position {position2}")
             
-            # Check that these are indeed the last 2 copies
-            # Count how many are already revealed across all players
-            revealed_count = 0
-            for p in self.players:
-                if p.belief_system:
-                    revealed_count += p.belief_system.value_trackers[value].get_revealed_count()
+            # # Check that these are indeed the last 2 copies
+            # # Count how many are already revealed across all players
+            # revealed_count = 0
+            # for p in self.players:
+            #     if p.belief_system:
+            #         revealed_count += p.belief_system.value_trackers[value].get_revealed_count()
             
-            total_copies = self.config.wire_distribution[value]
-            if revealed_count != total_copies - 2:
-                raise ValueError(f"Not the last 2 copies: {revealed_count} already revealed out of {total_copies}")
+            # total_copies = self.config.wire_distribution[value]
+            # if revealed_count != total_copies - 2:
+            #     raise ValueError(f"Not the last 2 copies: {revealed_count} already revealed out of {total_copies}")
     
     def _broadcast_double_reveal(self, reveal_record: DoubleRevealRecord):
         """

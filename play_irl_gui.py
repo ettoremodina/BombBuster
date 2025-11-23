@@ -1571,6 +1571,10 @@ class SuggesterPanel(tk.Frame):
         tk.Button(button_container, text="🧠 ENTROPY ANALYSIS", command=self.run_entropy_analysis,
                  bg="#9C27B0", fg="white", padx=10, pady=5, font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=5)
         
+        # Double Chance button
+        tk.Button(button_container, text="🎲 DOUBLE CHANCE", command=self.show_double_chance_suggestions,
+                 bg="#FF5722", fg="white", padx=10, pady=5, font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=5)
+        
         # Value filter section
         filter_frame = tk.Frame(self, bg="#F3E5F5", padx=5, pady=5, relief=tk.GROOVE, borderwidth=1)
         filter_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -1720,6 +1724,109 @@ class SuggesterPanel(tk.Frame):
             progress_window.destroy()
             messagebox.showerror("Error", f"Entropy analysis failed:\n{str(e)}")
             self.entropy_best_call = None
+    
+    def show_double_chance_suggestions(self):
+        """Show Double Chance suggestions in a popup window."""
+        if not self.app.my_player or not self.app.my_player.belief_system:
+            messagebox.showwarning("No Game", "No active game to analyze")
+            return
+        
+        # Apply filters first
+        self.app.my_player.belief_system.apply_filters()
+        
+        # Get current wire
+        current_wire = self.app.my_player.get_wire()
+        stats = GameStatistics(self.app.my_player.belief_system, self.app.config, current_wire)
+        
+        # Get double chance suggestions
+        try:
+            suggestions = stats.get_double_chance_suggestions()
+            
+            if not suggestions:
+                messagebox.showinfo("No Suggestions", "No Double Chance suggestions available.")
+                return
+            
+            # Create popup window
+            popup = tk.Toplevel(self.app.root)
+            popup.title("Double Chance Suggestions")
+            popup.geometry("600x500")
+            popup.transient(self.app.root)
+            
+            # Header
+            header_frame = tk.Frame(popup, bg="#FF5722", padx=20, pady=15)
+            header_frame.pack(fill=tk.X)
+            
+            tk.Label(header_frame, text="🎲 DOUBLE CHANCE SUGGESTIONS", 
+                    font=("Arial", 16, "bold"), bg="#FF5722", fg="white").pack()
+            tk.Label(header_frame, text="Select 2 wires from the same player and call a value", 
+                    font=("Arial", 9, "italic"), bg="#FF5722", fg="white").pack()
+            
+            # Scrollable content
+            canvas = tk.Canvas(popup)
+            scrollbar = tk.Scrollbar(popup, orient="vertical", command=canvas.yview)
+            scrollable_frame = tk.Frame(canvas)
+            
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+            
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            # Separate certain and uncertain suggestions
+            certain = [s for s in suggestions if s['is_certain']]
+            uncertain = [s for s in suggestions if not s['is_certain']]
+            
+            # Display certain suggestions
+            if certain:
+                certain_frame = tk.Frame(scrollable_frame, bg="#E8F5E9", padx=10, pady=10, relief=tk.GROOVE, borderwidth=2)
+                certain_frame.pack(fill=tk.X, padx=10, pady=5)
+                
+                tk.Label(certain_frame, text=f"✓ CERTAIN DOUBLE CHANCES ({len(certain)})", 
+                        font=("Arial", 12, "bold"), bg="#E8F5E9", fg="#2E7D32").pack(anchor="w", pady=5)
+                
+                for s in certain[:10]:
+                    target_name = self.app.player_names.get(s['target_id'], f"Player {s['target_id']}")
+                    p1, p2 = s['positions']
+                    
+                    item_frame = tk.Frame(certain_frame, bg="white", padx=10, pady=5, relief=tk.RAISED, borderwidth=1)
+                    item_frame.pack(fill=tk.X, pady=2)
+                    
+                    text = f"→ Call {target_name}[{p1+1} or {p2+1}] = {s['value']} (100%)"
+                    tk.Label(item_frame, text=text, font=("Arial", 10), bg="white", anchor="w").pack(fill=tk.X)
+                
+                if len(certain) > 10:
+                    tk.Label(certain_frame, text=f"... and {len(certain) - 10} more certain calls", 
+                            font=("Arial", 9, "italic"), bg="#E8F5E9", fg="#666666").pack(pady=5)
+            
+            # Display best uncertain suggestions
+            if uncertain:
+                uncertain_frame = tk.Frame(scrollable_frame, bg="#FFF3E0", padx=10, pady=10, relief=tk.GROOVE, borderwidth=2)
+                uncertain_frame.pack(fill=tk.X, padx=10, pady=5)
+                
+                tk.Label(uncertain_frame, text="⚠️ BEST UNCERTAIN DOUBLE CHANCES", 
+                        font=("Arial", 12, "bold"), bg="#FFF3E0", fg="#E65100").pack(anchor="w", pady=5)
+                
+                for s in uncertain[:10]:
+                    target_name = self.app.player_names.get(s['target_id'], f"Player {s['target_id']}")
+                    p1, p2 = s['positions']
+                    
+                    item_frame = tk.Frame(uncertain_frame, bg="white", padx=10, pady=5, relief=tk.RAISED, borderwidth=1)
+                    item_frame.pack(fill=tk.X, pady=2)
+                    
+                    text = f"→ Call {target_name}[{p1+1} or {p2+1}] = {s['value']} ({s['probability']:.1%})"
+                    tk.Label(item_frame, text=text, font=("Arial", 10), bg="white", anchor="w").pack(fill=tk.X)
+            
+            canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+            scrollbar.pack(side="right", fill="y")
+            
+            # Close button
+            tk.Button(popup, text="CLOSE", command=popup.destroy,
+                     bg="#FF5722", fg="white", padx=20, pady=8, font=("Arial", 10, "bold")).pack(pady=10)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to generate Double Chance suggestions:\n{str(e)}")
 
     def refresh(self):
         """Refresh the suggestions list."""

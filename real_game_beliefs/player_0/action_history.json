@@ -2,31 +2,28 @@
   "calls": [],
   "double_reveals": [],
   "swaps": [],
-  "signals": [
-    [
-      "Brini",
-      8,
-      7
-    ],
-    [
-      "Frodo",
-      9,
-      9
-    ],
-    [
-      "Gorgo",
-      12,
-      11
-    ],
-    [
-      "Andre",
-      11,
-      11
-    ]
-  ],
+  "signals": [],
   "reveals": [],
   "not_present": [],
-  "has_values": [],
-  "copy_count_signals": [],
-  "adjacent_signals": []
+  "has_values": [
+    [
+      "Brini",
+      1
+    ]
+  ],
+  "copy_count_signals": [
+    [
+      1,
+      0,
+      3
+    ]
+  ],
+  "adjacent_signals": [
+    [
+      1,
+      0,
+      1,
+      true
+    ]
+  ]
 }
