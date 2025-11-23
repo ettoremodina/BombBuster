@@ -7,6 +7,8 @@ from concurrent.futures import ProcessPoolExecutor, TimeoutError
 from src.belief.global_belief_utils import generate_signatures_worker, filter_signatures_worker
 import time
 
+TIME_OUT = 5.0
+
 # Global executor to avoid overhead of creating processes repeatedly
 _executor = None
 
@@ -53,7 +55,7 @@ class GlobalBeliefModel(BeliefModel):
         Falls back to parent's iterative filters if global solver takes too long (>10s).
         """
         start_time = time.time()
-        timeout_seconds = 10.0
+        timeout_seconds = TIME_OUT
         
         try:
             # Run the global solver with timeout monitoring
@@ -178,6 +180,8 @@ class GlobalBeliefModel(BeliefModel):
 
             for prev_res in Alpha[i]:
                 for sig in V[i]:
+                    if time.time() - start_time > timeout_seconds:
+                        raise TimeoutError("Global solver exceeded timeout during forward pass")
                     # Vector addition
                     new_res = tuple(a + b for a, b in zip(prev_res, sig))
                     

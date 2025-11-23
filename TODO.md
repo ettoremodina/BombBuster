@@ -8,8 +8,6 @@ The entropy-based suggester is not optimal. It maximizes MY information gain, bu
 ## multipliers don't work in the global solver
 - understand how global works and fix it
 
-## switch solver based on entropy
-
 ## advance autoplay
 - if the previous player uses a double chance, than I can extract information from that
 

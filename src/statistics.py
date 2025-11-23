@@ -7,7 +7,7 @@ import math
 from typing import Dict, List, Tuple, Set, Union, Optional
 from src.belief.belief_model import BeliefModel
 from config.game_config import GameConfig
-
+# from tqdm import tqdm
 
 class GameStatistics:
     """
@@ -453,11 +453,14 @@ class GameStatistics:
         backtrack(0, [], {})
         return valid_hands
 
-    def get_double_chance_suggestions(self) -> List[Dict]:
+    def get_double_chance_suggestions(self, max_hands: int = 1000000) -> List[Dict]:
         """
         Get suggestions for the 'Double Chance' mechanic.
         Select 2 wires of the same player and a value.
         Success if either wire has that value.
+        
+        Args:
+            max_hands: Maximum number of hands to generate before using approximation
         
         Returns:
             List of dicts with keys: target_id, positions, value, probability, is_certain
@@ -470,41 +473,112 @@ class GameStatistics:
         for target_id in range(self.config.n_players):
             if target_id == self.my_player_id:
                 continue
-                
+            
             valid_hands = self._generate_valid_hands(target_id)
-            if not valid_hands:
-                continue
+            print(f"Generated {len(valid_hands)} valid hands for player {target_id}")
             
-            total_hands = len(valid_hands)
-            
-            # Iterate over all pairs of positions
-            for i in range(self.config.wires_per_player):
-                for j in range(i + 1, self.config.wires_per_player):
-                    
-                    # Skip if both positions are already revealed
-                    if self.is_position_revealed(target_id, i) or self.is_position_revealed(target_id, j):
-                        continue
-                        
-                    for value in my_values:
-                        # Count successes
-                        success_count = 0
-                        for hand in valid_hands:
-                            if hand[i] == value or hand[j] == value:
-                                success_count += 1
-                        
-                        if success_count > 0:
-                            prob = success_count / total_hands
-                            suggestions.append({
-                                'target_id': target_id,
-                                'positions': (i, j),
-                                'value': value,
-                                'probability': prob,
-                                'is_certain': prob >= 0.999999
-                            })
+            if len(valid_hands) > max_hands:
+                self._add_approximate_double_chance_suggestions(
+                    target_id, my_values, suggestions
+                )
+            else:
+                if not valid_hands:
+                    continue
+                
+                self._add_exact_double_chance_suggestions(
+                    target_id, my_values, valid_hands, suggestions
+                )
                             
-        # Sort by probability descending
         suggestions.sort(key=lambda x: x['probability'], reverse=True)
         return suggestions
+
+    
+    def _add_exact_double_chance_suggestions(
+        self, 
+        target_id: int, 
+        my_values: Set[Union[int, float]], 
+        valid_hands: List[Tuple[Union[int, float], ...]], 
+        suggestions: List[Dict]
+    ):
+        """Add suggestions using exact hand enumeration (single-pass optimization)."""
+        total_hands = len(valid_hands)
+        
+        # Single pass through all hands to collect all statistics
+        # For each (pos_i, pos_j, value) combination, count successes
+        success_counts = {}
+        
+        for hand in valid_hands:
+            # For each pair of positions
+            for i in range(self.config.wires_per_player):
+                if self.is_position_revealed(target_id, i):
+                    continue
+                
+                for j in range(i + 1, self.config.wires_per_player):
+                    if self.is_position_revealed(target_id, j):
+                        continue
+                    
+                    # Check which values from my_values appear at position i or j
+                    val_i = hand[i]
+                    val_j = hand[j]
+                    
+                    # If either position has a value we can play, count it
+                    for value in my_values:
+                        if val_i == value or val_j == value:
+                            key = (i, j, value)
+                            success_counts[key] = success_counts.get(key, 0) + 1
+        
+        # Convert counts to suggestions
+        for (i, j, value), count in success_counts.items():
+            prob = count / total_hands
+            suggestions.append({
+                'target_id': target_id,
+                'positions': (i, j),
+                'value': value,
+                'probability': prob,
+                'is_certain': prob >= 0.999999
+            })
+    
+    def _add_approximate_double_chance_suggestions(
+        self, 
+        target_id: int, 
+        my_values: Set[Union[int, float]], 
+        suggestions: List[Dict]
+    ):
+        """Add suggestions using belief-based approximation for large search spaces."""
+        beliefs = self.belief_model.beliefs[target_id]
+        
+        for i in range(self.config.wires_per_player):
+            if self.is_position_revealed(target_id, i):
+                continue
+            
+            for j in range(i + 1, self.config.wires_per_player):
+                if self.is_position_revealed(target_id, j):
+                    continue
+                
+                pos_i_beliefs = beliefs[i]
+                pos_j_beliefs = beliefs[j]
+                
+                for value in my_values:
+                    # Approximate probability assuming independence (upper bound)
+                    # P(value at i OR value at j) ≈ P(value at i) + P(value at j) - P(value at i) * P(value at j)
+                    
+                    if value not in pos_i_beliefs and value not in pos_j_beliefs:
+                        continue
+                    
+                    prob_i = 1.0 / len(pos_i_beliefs) if value in pos_i_beliefs else 0.0
+                    prob_j = 1.0 / len(pos_j_beliefs) if value in pos_j_beliefs else 0.0
+                    
+                    # Independence assumption (may overestimate)
+                    prob = prob_i + prob_j - (prob_i * prob_j)
+                    
+                    if prob > 0:
+                        suggestions.append({
+                            'target_id': target_id,
+                            'positions': (i, j),
+                            'value': value,
+                            'probability': prob,
+                            'is_certain': False  # Never certain with approximation
+                        })
 
     def print_double_chance_suggestions(self, player_names: Dict[int, str] = None):
         """

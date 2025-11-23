@@ -7,15 +7,15 @@ USE_GLOBAL_BELIEF = True # Use the new global belief model (True) or the old one
 # Format: {value: number_of_copies}
 WIRE_DISTRIBUTION = {
     **{i: 4 for i in range(1, 13)},  # Values 1-12 have 4 copies each
-    2.5: 1,                       
-    7.5: 1,                       
-    8.5: 1,                       
+    # 2.5: 1,                       
+    # 7.5: 1,                       
+    # 8.5: 1,                       
     
 }
 EXTRA_UNCERTAIN_WIRES = {
-    # 7.5: 1,
-    # 8.5: 1,
-    # 6.5: 1,
+    7.5: 1,
+    8.5: 1,
+    6.5: 1,
 }
 # Your player configuration
 # MY_WIRE = list(range(1,13))+list(range(1,6))
@@ -26,8 +26,8 @@ PLAYER_NAMES = [
     "Ettore",
     "Brini",
     "Frodo",
-    # "Gorgo",
-    # "Andre"
+    "Gorgo",
+    "Andre"
 ]
 
 

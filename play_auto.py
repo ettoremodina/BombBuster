@@ -15,7 +15,7 @@ from src.utils import generate_wires, find_first_unrevealed_position
 from src.statistics import GameStatistics
 
 
-USE_GLOBAL_BELIEF = False
+USE_GLOBAL_BELIEF = True
 
 
 def setup_game(config: GameConfig) -> Tuple[Game, List[Player], List[BaseAgent], Optional[int]]:
@@ -195,15 +195,14 @@ def process_turn(game: Game, players: List[Player], agents: List[BaseAgent],
                 void_player_id: Optional[int], config: GameConfig, filter_times: List, K: int) -> Tuple[bool, int]:
     current_player_id = game.current_turn % config.n_players
     
-    if K == 1:
-        players[current_player_id].belief_system.apply_filters()
-    
     if current_player_id == void_player_id:
         print(f"\n--- Turn {game.current_turn} (VOID Player) ---")
         print("Skipping VOID player turn.")
         game.current_turn += 1
         return False, 1
     
+    if K == 1:
+        players[current_player_id].belief_system.apply_filters()
     game.current_turn += 1
     action_result = process_action(game, players, agents, current_player_id, config, filter_times, K)
     
