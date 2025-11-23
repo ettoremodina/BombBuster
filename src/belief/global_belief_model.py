@@ -3,8 +3,9 @@ from src.belief.belief_model import BeliefModel
 from src.data_structures import GameObservation, SignalCopyCountRecord, SignalAdjacentRecord
 from config.game_config import GameConfig
 import collections
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, TimeoutError
 from src.belief.global_belief_utils import generate_signatures_worker, filter_signatures_worker
+import time
 
 # Global executor to avoid overhead of creating processes repeatedly
 _executor = None
@@ -49,30 +50,55 @@ class GlobalBeliefModel(BeliefModel):
     def apply_filters(self):
         """
         Override the iterative filter application with the Global Consistency Algorithm.
+        Falls back to parent's iterative filters if global solver takes too long (>10s).
         """
-        # Run the global solver
-        self._solve_global_consistency()
+        start_time = time.time()
+        timeout_seconds = 10.0
         
-        # Update value trackers based on new certainties
-        self._update_value_trackers()
-        # Save state if playing IRL
-        if self.config.playing_irl:
-            try:
-                # Import here to avoid circular imports
-                from config.game_config import BELIEF_FOLDER, PLAYER_NAMES
-                player_names_dict = {i: name for i, name in enumerate(PLAYER_NAMES)}
-                self.save_to_folder(BELIEF_FOLDER, player_names_dict)
-            except Exception as e:
-                print(f"Warning: Failed to auto-save belief state: {e}")
+        try:
+            # Run the global solver with timeout monitoring
+            self._solve_global_consistency_with_timeout(timeout_seconds, start_time)
+            
+            elapsed = time.time() - start_time
+            if elapsed >= timeout_seconds:
+                # Timeout occurred, fall back to parent method
+                print(f"⚠️  Global solver timed out after {elapsed:.2f}s, falling back to iterative filters")
+                super().apply_filters()
+            else:
+                # Success - update value trackers and save
+                self._update_value_trackers()
+                # Save state if playing IRL
+                if self.config.playing_irl:
+                    try:
+                        # Import here to avoid circular imports
+                        from config.game_config import BELIEF_FOLDER, PLAYER_NAMES
+                        player_names_dict = {i: name for i, name in enumerate(PLAYER_NAMES)}
+                        self.save_to_folder(BELIEF_FOLDER, player_names_dict)
+                    except Exception as e:
+                        print(f"Warning: Failed to auto-save belief state: {e}")
+        except TimeoutError:
+            # Explicit timeout from futures
+            print(f"⚠️  Global solver timed out, falling back to iterative filters")
+            super().apply_filters()
+        except Exception as e:
+            # Any other error, fall back to parent method
+            print(f"⚠️  Global solver failed with error: {e}, falling back to iterative filters")
+            super().apply_filters()
 
-    def _solve_global_consistency(self):
+    def _solve_global_consistency_with_timeout(self, timeout_seconds: float, start_time: float):
         """
-        Executes the 3-phase algorithm:
+        Executes the 3-phase algorithm with timeout checking:
         1. Local Candidate Generation (Signatures)
         2. Forward-Backward Global Filtering
         3. Projection to Minimal Domains
+        
+        Raises TimeoutError if execution exceeds timeout_seconds.
         """
         N = self.config.n_players
+        
+        # Check timeout
+        if time.time() - start_time > timeout_seconds:
+            raise TimeoutError("Global solver exceeded timeout")
         
         # --- Phase 1: Local Generation ---
         # V[i] stores set of valid signatures (tuples) for player i
@@ -107,16 +133,29 @@ class GlobalBeliefModel(BeliefModel):
                 futures.append(get_executor().submit(generate_signatures_worker, *args))
                 V.append(None) # Placeholder
 
-        # Collect results
+        # Collect results with timeout
         for i, f in enumerate(futures):
             if f is not None:
-                sigs = f.result()
+                # Check timeout before waiting
+                remaining_time = timeout_seconds - (time.time() - start_time)
+                if remaining_time <= 0:
+                    raise TimeoutError("Global solver exceeded timeout during signature generation")
+                
+                try:
+                    sigs = f.result(timeout=remaining_time)
+                except TimeoutError:
+                    raise TimeoutError("Global solver exceeded timeout during signature generation")
+                
                 if not sigs:
                     print(f"CRITICAL: No valid hands found for player {i}")
                     return
                 V[i] = sigs
                 # Update cache
                 self._signature_cache[cache_keys[i]] = sigs
+
+        # Check timeout
+        if time.time() - start_time > timeout_seconds:
+            raise TimeoutError("Global solver exceeded timeout")
 
         # --- Phase 2: Forward Pass (Alpha) ---
         # Alpha[i] = set of consumed resource vectors after player i (0 to i-1)
@@ -128,6 +167,10 @@ class GlobalBeliefModel(BeliefModel):
         Alpha[0].add(zero_vector)
 
         for i in range(N):
+            # Check timeout
+            if time.time() - start_time > timeout_seconds:
+                raise TimeoutError("Global solver exceeded timeout during forward pass")
+            
             # Pruning: If Alpha[i] is empty, we can't proceed
             if not Alpha[i]:
                 print(f"CRITICAL: Alpha[{i}] is empty. Impossible state.")
@@ -148,6 +191,10 @@ class GlobalBeliefModel(BeliefModel):
             # This implies the current beliefs/constraints are contradictory
             return
 
+        # Check timeout
+        if time.time() - start_time > timeout_seconds:
+            raise TimeoutError("Global solver exceeded timeout")
+
         # --- Phase 2: Backward Pass (Beta) ---
         # Beta[i] = set of resource vectors NEEDED by players i...N-1
         # Beta[N] is {0-vector} (needed by no one)
@@ -157,6 +204,10 @@ class GlobalBeliefModel(BeliefModel):
         Beta[N].add(zero_vector)
 
         for i in range(N - 1, -1, -1): # N-1 down to 0
+            # Check timeout
+            if time.time() - start_time > timeout_seconds:
+                raise TimeoutError("Global solver exceeded timeout during backward pass")
+            
             for needed_res in Beta[i+1]:
                 for sig in V[i]:
                     # Vector addition: needed_res + sig
@@ -164,6 +215,10 @@ class GlobalBeliefModel(BeliefModel):
                     
                     if all(x <= y for x, y in zip(total_needed, self.total_deck)):
                         Beta[i].add(total_needed)
+
+        # Check timeout
+        if time.time() - start_time > timeout_seconds:
+            raise TimeoutError("Global solver exceeded timeout")
 
         # --- Phase 3: Projection ---
         # For each player, find globally valid signatures and project to domains
@@ -179,8 +234,18 @@ class GlobalBeliefModel(BeliefModel):
                 self.config.wires_per_player
             )
             futures.append(get_executor().submit(filter_signatures_worker, *args))
+        
+        # Collect results with timeout
+        results = []
+        for f in futures:
+            remaining_time = timeout_seconds - (time.time() - start_time)
+            if remaining_time <= 0:
+                raise TimeoutError("Global solver exceeded timeout during projection")
             
-        results = [f.result() for f in futures]
+            try:
+                results.append(f.result(timeout=remaining_time))
+            except TimeoutError:
+                raise TimeoutError("Global solver exceeded timeout during projection")
         
         for p, new_domains in enumerate(results):
             for pos in range(self.config.wires_per_player):
