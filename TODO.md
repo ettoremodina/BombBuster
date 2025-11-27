@@ -1,14 +1,21 @@
-# NOTE
-The entropy-based suggester is not optimal. It maximizes MY information gain, but not necessarily for the next player to play. Best way would be to maximize the expected information gain for the next player, given my action. This would require simulating all possible actions and their outcomes, which is more complex.
+# FUTURE DEVELOPMENTS
+- The entropy-based suggester is not optimal. It maximizes MY information gain, but not necessarily for the next player to play. Best way would be to maximize the expected information gain for the next player, given my action. This would require simulating all possible actions and their outcomes, which is more complex
 
-# TO DO
+## The Same Brain predictior
+- If all agents use the same strategy or prediction model I can use this information
+The idea is to generate all possible hands for a player, then see which would have resulted in that action.
+Note that to do that I need to simulate from the state prevoius to the action, so I need to save the game state before each action, but I can keep the most recent knowledge for the hand of that player since he has acted from that knowledge
+Those form the basis for creating a more precise belief model for that player 
 
-## rimuovi tessere con 99
+## Remove timeout
+- use the normal apply filters based on the total amount of generated hands, which is computed beforehand (and is fast). In this way I avoid waiting for the timeout, which is not elegant
 
-## multipliers don't work in the global solver
-- understand how global works and fix it
+## Debugging and Improvements
 
-## advance autoplay
+ rimuovi tessere con 99
+ iterative filter may have a problem but I don't know how to test it properly
+ messy but working utils
+ advance autoplay
 - if the previous player uses a double chance, than I can extract information from that
 
 ## CHECK ALL FILTERS INDIVIDUALLY

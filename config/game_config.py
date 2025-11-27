@@ -19,7 +19,7 @@ EXTRA_UNCERTAIN_WIRES = {
 }
 # Your player configuration
 # MY_WIRE = list(range(1,13))+list(range(1,6))
-MY_WIRE = [1,1,1,1,2,2,3,4,7,8,8,8.5,9,10,10,11,12]
+MY_WIRE = [1,1,1,1,2,2,3,4,7,8]
 
 # Player names (in order by player ID)
 PLAYER_NAMES = [
@@ -39,10 +39,7 @@ BELIEF_FOLDER = "real_game_beliefs"
 AUTO_SAVE = True       # Automatically save after each action
 LOAD_EXISTING = True   # Load existing beliefs on startup
 
-MAX_UNCERTAINTY = 4  # Max uncertainty level for entropy analysis
-
-
-
+MAX_UNCERTAINTY = 3  # Max uncertainty level for entropy analysis
 
 
 # enable USE_VOID_PLAYER when EXTRA_UNCERTAIN_WIRES is non-empty

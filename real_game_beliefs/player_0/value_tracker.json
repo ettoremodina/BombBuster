@@ -1,4 +1,10 @@
 {
+  "0": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "9/9"
+  },
   "1": {
     "revealed": [],
     "certain": [
@@ -37,12 +43,6 @@
     "called": [],
     "uncertain": "2/4"
   },
-  "2.5": {
-    "revealed": [],
-    "certain": [],
-    "called": [],
-    "uncertain": "1/1"
-  },
   "3": {
     "revealed": [],
     "certain": [
@@ -76,6 +76,12 @@
     "certain": [],
     "called": [],
     "uncertain": "4/4"
+  },
+  "6.5": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "1/1"
   },
   "7": {
     "revealed": [],
@@ -167,5 +173,11 @@
     ],
     "called": [],
     "uncertain": "3/4"
+  },
+  "2.5": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "0/0"
   }
 }

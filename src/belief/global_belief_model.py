@@ -3,19 +3,19 @@ from src.belief.belief_model import BeliefModel
 from src.data_structures import GameObservation, SignalCopyCountRecord, SignalAdjacentRecord
 from config.game_config import GameConfig
 import collections
-from concurrent.futures import ProcessPoolExecutor, TimeoutError
-from src.belief.global_belief_utils import generate_signatures_worker, filter_signatures_worker
-import time
+from concurrent.futures import ProcessPoolExecutor
+from src.belief.global_belief_utils import generate_signatures_worker
+import multiprocessing as mp
 
-TIME_OUT = 5.0
+COMPLEXITY_THRESHOLD = 10000
 
-# Global executor to avoid overhead of creating processes repeatedly
 _executor = None
+_n_workers = max(1, mp.cpu_count() - 1)
 
 def get_executor():
     global _executor
     if _executor is None:
-        _executor = ProcessPoolExecutor()
+        _executor = ProcessPoolExecutor(max_workers=_n_workers)
     return _executor
 
 class GlobalBeliefModel(BeliefModel):
@@ -47,79 +47,65 @@ class GlobalBeliefModel(BeliefModel):
         # Key: (player_id, belief_hash, constraint_hash) -> Set[Tuple[int, ...]]
         self._signature_cache = {}
         
+        # Storage for valid hands (actual value tuples, not signatures)
+        # Populated after successful global filtering
+        self.valid_hands: Dict[int, List[Tuple]] = {}
+        
         super().__init__(observation, config)
 
     def apply_filters(self):
         """
         Override the iterative filter application with the Global Consistency Algorithm.
-        Falls back to parent's iterative filters if global solver takes too long (>10s).
+        Uses complexity heuristic to decide whether to run global solver or fall back.
         """
-        start_time = time.time()
-        timeout_seconds = TIME_OUT
-        
-        try:
-            # Run the global solver with timeout monitoring
-            self._solve_global_consistency_with_timeout(timeout_seconds, start_time)
-            
-            elapsed = time.time() - start_time
-            if elapsed >= timeout_seconds:
-                # Timeout occurred, fall back to parent method
-                print(f"⚠️  Global solver timed out after {elapsed:.2f}s, falling back to iterative filters")
-                super().apply_filters()
-            else:
-                # Success - update value trackers and save
-                self._update_value_trackers()
-                # Save state if playing IRL
-                if self.config.playing_irl:
-                    try:
-                        # Import here to avoid circular imports
-                        from config.game_config import BELIEF_FOLDER, PLAYER_NAMES
-                        player_names_dict = {i: name for i, name in enumerate(PLAYER_NAMES)}
-                        self.save_to_folder(BELIEF_FOLDER, player_names_dict)
-                    except Exception as e:
-                        print(f"Warning: Failed to auto-save belief state: {e}")
-        except TimeoutError:
-            # Explicit timeout from futures
-            print(f"⚠️  Global solver timed out, falling back to iterative filters")
+        # Phase 1: Generate local signatures (fast)
+        V = self._generate_local_signatures()
+        if V is None:
             super().apply_filters()
-        except Exception as e:
-            # Any other error, fall back to parent method
-            print(f"⚠️  Global solver failed with error: {e}, falling back to iterative filters")
+            return
+        
+        # Complexity heuristic: check total signatures before expensive global filtering
+        total_signatures = sum(len(s) for s in V)
+        if total_signatures > COMPLEXITY_THRESHOLD:
+            print(f"⚠️  Complexity too high ({total_signatures} signatures), falling back to iterative filters")
+            super().apply_filters()
+            return
+        
+        # Phase 2 & 3: Global filtering and projection
+        success = self._solve_global_consistency(V)
+        
+        if success:
+            self._update_value_trackers()
+            if self.config.playing_irl:
+                try:
+                    from config.game_config import BELIEF_FOLDER, PLAYER_NAMES
+                    player_names_dict = {i: name for i, name in enumerate(PLAYER_NAMES)}
+                    self.save_to_folder(BELIEF_FOLDER, player_names_dict)
+                except Exception as e:
+                    print(f"Warning: Failed to auto-save belief state: {e}")
+        else:
             super().apply_filters()
 
-    def _solve_global_consistency_with_timeout(self, timeout_seconds: float, start_time: float):
+    def _generate_local_signatures(self) -> Optional[List[Set[Tuple[int, ...]]]]:
         """
-        Executes the 3-phase algorithm with timeout checking:
-        1. Local Candidate Generation (Signatures)
-        2. Forward-Backward Global Filtering
-        3. Projection to Minimal Domains
-        
-        Raises TimeoutError if execution exceeds timeout_seconds.
+        Phase 1: Generate local candidate signatures for each player.
+        Returns None if generation fails.
         """
         N = self.config.n_players
         
-        # Check timeout
-        if time.time() - start_time > timeout_seconds:
-            raise TimeoutError("Global solver exceeded timeout")
-        
-        # --- Phase 1: Local Generation ---
-        # V[i] stores set of valid signatures (tuples) for player i
         V: List[Set[Tuple[int, ...]]] = []
-        
         futures = []
         cache_keys = []
         
         for i in range(N):
-            min_counts = self._get_min_counts(i)
+            min_counts = self._get_min_counts(i) 
             cache_key = self._get_cache_key(i, min_counts)
             cache_keys.append(cache_key)
             
             if cache_key in self._signature_cache:
-                # Use cached result (dummy future)
                 V.append(self._signature_cache[cache_key])
                 futures.append(None)
             else:
-                # Submit task
                 args = (
                     i, 
                     self.config.wires_per_player, 
@@ -133,99 +119,101 @@ class GlobalBeliefModel(BeliefModel):
                     self.K
                 )
                 futures.append(get_executor().submit(generate_signatures_worker, *args))
-                V.append(None) # Placeholder
+                V.append(None)
 
-        # Collect results with timeout
         for i, f in enumerate(futures):
             if f is not None:
-                # Check timeout before waiting
-                remaining_time = timeout_seconds - (time.time() - start_time)
-                if remaining_time <= 0:
-                    raise TimeoutError("Global solver exceeded timeout during signature generation")
-                
-                try:
-                    sigs = f.result(timeout=remaining_time)
-                except TimeoutError:
-                    raise TimeoutError("Global solver exceeded timeout during signature generation")
-                
+                sigs = f.result()
                 if not sigs:
                     print(f"CRITICAL: No valid hands found for player {i}")
-                    return
+                    return None
                 V[i] = sigs
-                # Update cache
                 self._signature_cache[cache_keys[i]] = sigs
 
-        # Check timeout
-        if time.time() - start_time > timeout_seconds:
-            raise TimeoutError("Global solver exceeded timeout")
+        return V
 
-        # --- Phase 2: Forward Pass (Alpha) ---
-        # Alpha[i] = set of consumed resource vectors after player i (0 to i-1)
-        # Alpha[0] is {0-vector}
-        # Alpha[N] should contain Total_Deck
-        
-        zero_vector = tuple([0] * self.K)
+    def _solve_global_consistency(self, V: List[Set[Tuple[int, ...]]]) -> bool:
+        """
+        Phase 2 & 3: Forward-backward global filtering and projection.
+        Also stores valid hands for external use.
+        Returns True on success, False on failure.
+        """
+        N = self.config.n_players
+        K = self.K
+        total_deck = self.total_deck
+
+        # --- Phase 2: Forward Pass (Alpha) - Parallelized ---
+        zero_vector = tuple([0] * K)
         Alpha: List[Set[Tuple[int, ...]]] = [set() for _ in range(N + 1)]
         Alpha[0].add(zero_vector)
 
         for i in range(N):
-            # Check timeout
-            if time.time() - start_time > timeout_seconds:
-                raise TimeoutError("Global solver exceeded timeout during forward pass")
-            
-            # Pruning: If Alpha[i] is empty, we can't proceed
             if not Alpha[i]:
                 print(f"CRITICAL: Alpha[{i}] is empty. Impossible state.")
-                return
-
-            for prev_res in Alpha[i]:
-                for sig in V[i]:
-                    if time.time() - start_time > timeout_seconds:
-                        raise TimeoutError("Global solver exceeded timeout during forward pass")
-                    # Vector addition
-                    new_res = tuple(a + b for a, b in zip(prev_res, sig))
-                    
-                    # Check if valid (<= total_deck)
-                    if all(x <= y for x, y in zip(new_res, self.total_deck)):
-                        Alpha[i+1].add(new_res)
+                return False
+            
+            # Parallelize: split Alpha[i] across workers
+            alpha_list = list(Alpha[i])
+            V_i = V[i]
+            
+            if len(alpha_list) * len(V_i) > 1000:
+                # Worth parallelizing
+                chunk_size = max(1, len(alpha_list) // _n_workers)
+                chunks = [alpha_list[j:j+chunk_size] for j in range(0, len(alpha_list), chunk_size)]
+                
+                from src.belief.global_belief_utils import forward_pass_worker
+                futures = [
+                    get_executor().submit(forward_pass_worker, chunk, V_i, total_deck)
+                    for chunk in chunks
+                ]
+                
+                new_alpha = set()
+                for f in futures:
+                    new_alpha.update(f.result())
+                Alpha[i+1] = new_alpha
+            else:
+                # Sequential for small sets
+                for prev_res in Alpha[i]:
+                    for sig in V_i:
+                        new_res = tuple(a + b for a, b in zip(prev_res, sig))
+                        if all(x <= y for x, y in zip(new_res, total_deck)):
+                            Alpha[i+1].add(new_res)
         
-        # Check global consistency
-        if self.total_deck not in Alpha[N]:
+        if total_deck not in Alpha[N]:
             print("CRITICAL: Global resource constraint not met (Total Deck not reachable).")
-            # This implies the current beliefs/constraints are contradictory
-            return
+            return False
 
-        # Check timeout
-        if time.time() - start_time > timeout_seconds:
-            raise TimeoutError("Global solver exceeded timeout")
-
-        # --- Phase 2: Backward Pass (Beta) ---
-        # Beta[i] = set of resource vectors NEEDED by players i...N-1
-        # Beta[N] is {0-vector} (needed by no one)
-        # Note: Indexing aligns such that Beta[i] is what is needed FROM i onwards
-        
+        # --- Backward Pass (Beta) - Parallelized ---
         Beta: List[Set[Tuple[int, ...]]] = [set() for _ in range(N + 1)]
         Beta[N].add(zero_vector)
 
-        for i in range(N - 1, -1, -1): # N-1 down to 0
-            # Check timeout
-            if time.time() - start_time > timeout_seconds:
-                raise TimeoutError("Global solver exceeded timeout during backward pass")
+        for i in range(N - 1, -1, -1):
+            beta_list = list(Beta[i+1])
+            V_i = V[i]
             
-            for needed_res in Beta[i+1]:
-                for sig in V[i]:
-                    # Vector addition: needed_res + sig
-                    total_needed = tuple(a + b for a, b in zip(needed_res, sig))
-                    
-                    if all(x <= y for x, y in zip(total_needed, self.total_deck)):
-                        Beta[i].add(total_needed)
+            if len(beta_list) * len(V_i) > 1000:
+                chunk_size = max(1, len(beta_list) // _n_workers)
+                chunks = [beta_list[j:j+chunk_size] for j in range(0, len(beta_list), chunk_size)]
+                
+                from src.belief.global_belief_utils import backward_pass_worker
+                futures = [
+                    get_executor().submit(backward_pass_worker, chunk, V_i, total_deck)
+                    for chunk in chunks
+                ]
+                
+                new_beta = set()
+                for f in futures:
+                    new_beta.update(f.result())
+                Beta[i] = new_beta
+            else:
+                for needed_res in Beta[i+1]:
+                    for sig in V_i:
+                        total_needed = tuple(a + b for a, b in zip(needed_res, sig))
+                        if all(x <= y for x, y in zip(total_needed, total_deck)):
+                            Beta[i].add(total_needed)
 
-        # Check timeout
-        if time.time() - start_time > timeout_seconds:
-            raise TimeoutError("Global solver exceeded timeout")
-
-        # --- Phase 3: Projection ---
-        # For each player, find globally valid signatures and project to domains
+        # --- Phase 3: Projection - Parallelized ---
+        from src.belief.global_belief_utils import filter_signatures_and_get_hands_worker
         
         futures = []
         for p in range(N):
@@ -233,33 +221,30 @@ class GlobalBeliefModel(BeliefModel):
                 V[p], 
                 Alpha[p], 
                 Beta[p+1], 
-                self.total_deck, 
+                total_deck, 
                 self.sorted_values, 
                 self.config.wires_per_player
             )
-            futures.append(get_executor().submit(filter_signatures_worker, *args))
+            futures.append(get_executor().submit(filter_signatures_and_get_hands_worker, *args))
         
-        # Collect results with timeout
-        results = []
-        for f in futures:
-            remaining_time = timeout_seconds - (time.time() - start_time)
-            if remaining_time <= 0:
-                raise TimeoutError("Global solver exceeded timeout during projection")
+        results = [f.result() for f in futures]
+        
+        for p, (new_domains, valid_hands) in enumerate(results):
+            self.valid_hands[p] = valid_hands
             
-            try:
-                results.append(f.result(timeout=remaining_time))
-            except TimeoutError:
-                raise TimeoutError("Global solver exceeded timeout during projection")
-        
-        for p, new_domains in enumerate(results):
             for pos in range(self.config.wires_per_player):
-                # Intersect with existing beliefs
                 self.beliefs[p][pos] &= new_domains[pos]
                 
                 if not self.beliefs[p][pos]:
                     print(f"CRITICAL: Belief for P{p} Pos{pos} became empty during projection!")
+        
+        return True
 
     def _get_min_counts(self, player_id: int) -> Dict[Union[int, float], int]:
+        """
+        Compute the minimum counts for each value for the given player,
+        based on known cards and called values.
+        """
         min_counts = collections.defaultdict(int)
         hand_size = self.config.wires_per_player
         player_beliefs = self.beliefs[player_id]
@@ -311,5 +296,56 @@ class GlobalBeliefModel(BeliefModel):
         # Share the cache (it's safe as keys are hashes of state)
         new_model._signature_cache = self._signature_cache
         
+        # Deep copy valid_hands
+        new_model.valid_hands = {p: list(hands) for p, hands in self.valid_hands.items()}
+        
         return new_model
+
+    def get_valid_hands(self, player_id: int) -> List[Tuple]:
+        """
+        Get the list of valid hands for a player.
+        If global filtering was used, returns the cached valid hands.
+        Otherwise, generates them using local constraints only.
+        """
+        if player_id in self.valid_hands and self.valid_hands[player_id]:
+            return self.valid_hands[player_id]
+        
+        # Fallback: generate hands locally (without global constraint)
+        return self._generate_hands_local(player_id)
+    
+    def _generate_hands_local(self, player_id: int) -> List[Tuple]:
+        """
+        Generate valid hands for a player using only local constraints.
+        Used as fallback when global filtering was not performed.
+        """
+        beliefs = self.beliefs[player_id]
+        hand_size = self.config.wires_per_player
+        valid_hands = []
+        
+        def backtrack(pos: int, current_hand: List, current_counts: Dict):
+            if pos == hand_size:
+                valid_hands.append(tuple(current_hand))
+                return
+
+            possible_values = sorted(list(beliefs[pos]))
+            min_val = current_hand[-1] if pos > 0 else -float('inf')
+            
+            for val in possible_values:
+                if val < min_val:
+                    continue
+                
+                count = current_counts.get(val, 0) + 1
+                if count > self.config.get_copies(val):
+                    continue
+                
+                current_counts[val] = count
+                current_hand.append(val)
+                backtrack(pos + 1, current_hand, current_counts)
+                current_hand.pop()
+                current_counts[val] -= 1
+                if current_counts[val] == 0:
+                    del current_counts[val]
+
+        backtrack(0, [], {})
+        return valid_hands
 

@@ -412,47 +412,6 @@ class GameStatistics:
         
         print(f"\n{'='*80}")
         
-    def _generate_valid_hands(self, player_id: int) -> List[Tuple[Union[int, float], ...]]:
-        """
-        Generate all valid sorted hands for a player based on current beliefs.
-        """
-        beliefs = self.belief_model.beliefs[player_id]
-        hand_size = self.config.wires_per_player
-        valid_hands = []
-        
-        def backtrack(pos: int, current_hand: List[Union[int, float]], current_counts: Dict[Union[int, float], int]):
-            if pos == hand_size:
-                valid_hands.append(tuple(current_hand))
-                return
-
-            # Determine possible values for this position
-            # Must be in beliefs[pos]
-            # Must be >= previous value (sorted constraint)
-            
-            possible_values = sorted(list(beliefs[pos]))
-            min_val = current_hand[-1] if pos > 0 else -float('inf')
-            
-            for val in possible_values:
-                if val < min_val:
-                    continue
-                
-                # Check count constraint
-                count = current_counts.get(val, 0) + 1
-                if count > self.config.get_copies(val):
-                    continue
-                
-                # Recurse
-                current_counts[val] = count
-                current_hand.append(val)
-                backtrack(pos + 1, current_hand, current_counts)
-                current_hand.pop()
-                current_counts[val] -= 1
-                if current_counts[val] == 0:
-                    del current_counts[val]
-
-        backtrack(0, [], {})
-        return valid_hands
-
     def get_double_chance_suggestions(self, max_hands: int = 1000000) -> List[Dict]:
         """
         Get suggestions for the 'Double Chance' mechanic.
@@ -474,7 +433,7 @@ class GameStatistics:
             if target_id == self.my_player_id:
                 continue
             
-            valid_hands = self._generate_valid_hands(target_id)
+            valid_hands = self.belief_model.get_valid_hands(target_id)
             print(f"Generated {len(valid_hands)} valid hands for player {target_id}")
             
             if len(valid_hands) > max_hands:

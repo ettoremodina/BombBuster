@@ -1,6 +1,37 @@
 from typing import Dict, Set, List, Tuple, Optional, Union
 import collections
 
+
+def forward_pass_worker(
+    alpha_chunk: List[Tuple[int, ...]],
+    V_i: Set[Tuple[int, ...]],
+    total_deck: Tuple[int, ...]
+) -> Set[Tuple[int, ...]]:
+    """Worker for parallelized forward pass."""
+    result = set()
+    for prev_res in alpha_chunk:
+        for sig in V_i:
+            new_res = tuple(a + b for a, b in zip(prev_res, sig))
+            if all(x <= y for x, y in zip(new_res, total_deck)):
+                result.add(new_res)
+    return result
+
+
+def backward_pass_worker(
+    beta_chunk: List[Tuple[int, ...]],
+    V_i: Set[Tuple[int, ...]],
+    total_deck: Tuple[int, ...]
+) -> Set[Tuple[int, ...]]:
+    """Worker for parallelized backward pass."""
+    result = set()
+    for needed_res in beta_chunk:
+        for sig in V_i:
+            total_needed = tuple(a + b for a, b in zip(needed_res, sig))
+            if all(x <= y for x, y in zip(total_needed, total_deck)):
+                result.add(total_needed)
+    return result
+
+
 def generate_signatures_worker(
     player_id: int,
     hand_size: int,
@@ -150,13 +181,29 @@ def filter_signatures_worker(
     Worker function to filter signatures and project to domains.
     Returns a list of sets (new domains for each position).
     """
+    new_domains, _ = filter_signatures_and_get_hands_worker(
+        V_p, Alpha_p, Beta_next, total_deck, sorted_values, hand_size
+    )
+    return new_domains
+
+
+def filter_signatures_and_get_hands_worker(
+    V_p: Set[Tuple[int, ...]],
+    Alpha_p: Set[Tuple[int, ...]],
+    Beta_next: Set[Tuple[int, ...]],
+    total_deck: Tuple[int, ...],
+    sorted_values: List,
+    hand_size: int
+) -> Tuple[List[Set], List[Tuple]]:
+    """
+    Worker function to filter signatures, project to domains, and return valid hands.
+    Returns (new_domains, valid_hands) where valid_hands is a list of value tuples.
+    """
     valid_signatures = set()
     
-    # Optimization: Iterate sigs, calculate remainder, check if split exists
     for sig in V_p:
         remainder = tuple(t - s for t, s in zip(total_deck, sig))
         
-        # Check if remainder can be formed by Alpha[p] + Beta[p+1]
         is_valid = False
         
         if len(Alpha_p) < len(Beta_next):
@@ -175,17 +222,19 @@ def filter_signatures_worker(
         if is_valid:
             valid_signatures.add(sig)
     
-    # Project to domains
     new_domains = [set() for _ in range(hand_size)]
+    valid_hands = []
     
     for sig in valid_signatures:
-        # Reconstruct hand from signature
         hand = []
         for v_idx, count in enumerate(sig):
             val = sorted_values[v_idx]
             hand.extend([val] * count)
         
+        hand_tuple = tuple(hand)
+        valid_hands.append(hand_tuple)
+        
         for pos in range(hand_size):
             new_domains[pos].add(hand[pos])
             
-    return new_domains
+    return new_domains, valid_hands
