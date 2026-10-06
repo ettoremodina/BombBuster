@@ -1,5 +1,14 @@
 {
-  "calls": [],
+  "calls": [
+    [
+      "Brini",
+      "Frodo",
+      8,
+      6,
+      true,
+      9
+    ]
+  ],
   "double_reveals": [],
   "swaps": [],
   "signals": [],

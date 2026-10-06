@@ -23,15 +23,15 @@ MY_WIRE = [1,1,1,1,2,2,3,4,7,8]
 
 # Player names (in order by player ID)
 PLAYER_NAMES = [
-    "Ettore",
-    "Brini",
-    "Frodo",
-    "Gorgo",
-    "Andre"
+    "Player 1",
+    "Player 2",
+    "Player 3",
+    "Player 4",
+    "Player 5"
 ]
 
 
-MY_PLAYER_NAME = "Ettore"
+MY_PLAYER_NAME = "Player 1"
 # Belief folder for saving/loading game state
 BELIEF_FOLDER = "real_game_beliefs"
 

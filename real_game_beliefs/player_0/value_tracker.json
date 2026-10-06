@@ -9,19 +9,19 @@
     "revealed": [],
     "certain": [
       [
-        "Ettore",
+        "Player 1",
         0
       ],
       [
-        "Ettore",
+        "Player 1",
         1
       ],
       [
-        "Ettore",
+        "Player 1",
         2
       ],
       [
-        "Ettore",
+        "Player 1",
         3
       ]
     ],
@@ -32,11 +32,11 @@
     "revealed": [],
     "certain": [
       [
-        "Ettore",
+        "Player 1",
         4
       ],
       [
-        "Ettore",
+        "Player 1",
         5
       ]
     ],
@@ -47,7 +47,7 @@
     "revealed": [],
     "certain": [
       [
-        "Ettore",
+        "Player 1",
         6
       ]
     ],
@@ -58,7 +58,7 @@
     "revealed": [],
     "certain": [
       [
-        "Ettore",
+        "Player 1",
         7
       ]
     ],
@@ -72,10 +72,19 @@
     "uncertain": "4/4"
   },
   "6": {
-    "revealed": [],
+    "revealed": [
+      [
+        "Player 3",
+        7
+      ],
+      [
+        "Player 2",
+        8
+      ]
+    ],
     "certain": [],
     "called": [],
-    "uncertain": "4/4"
+    "uncertain": "2/4"
   },
   "6.5": {
     "revealed": [],
@@ -87,7 +96,7 @@
     "revealed": [],
     "certain": [
       [
-        "Ettore",
+        "Player 1",
         8
       ]
     ],
@@ -104,11 +113,11 @@
     "revealed": [],
     "certain": [
       [
-        "Ettore",
+        "Player 1",
         9
       ],
       [
-        "Ettore",
+        "Player 1",
         10
       ]
     ],
@@ -119,7 +128,7 @@
     "revealed": [],
     "certain": [
       [
-        "Ettore",
+        "Player 1",
         11
       ]
     ],
@@ -130,7 +139,7 @@
     "revealed": [],
     "certain": [
       [
-        "Ettore",
+        "Player 1",
         12
       ]
     ],
@@ -141,11 +150,11 @@
     "revealed": [],
     "certain": [
       [
-        "Ettore",
+        "Player 1",
         13
       ],
       [
-        "Ettore",
+        "Player 1",
         14
       ]
     ],
@@ -156,7 +165,7 @@
     "revealed": [],
     "certain": [
       [
-        "Ettore",
+        "Player 1",
         15
       ]
     ],
@@ -167,7 +176,7 @@
     "revealed": [],
     "certain": [
       [
-        "Ettore",
+        "Player 1",
         16
       ]
     ],
