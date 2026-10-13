@@ -9,6 +9,9 @@ Those form the basis for creating a more precise belief model for that player
 
 ## Debugging and Improvements
 
+- [ ] KNOWN BUG (2026-10-09): a called value can be counted twice and a possible value gets crossed out,
+  sometimes the true one. Measured, explained and with a tried fix in document/KNOWN_ISSUE_CALLED_VALUES.md
+
  rimuovi tessere con 99
  iterative filter may have a problem but I don't know how to test it properly
  messy but working utils
