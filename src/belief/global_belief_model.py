@@ -254,9 +254,12 @@ class GlobalBeliefModel(BeliefModel):
                 val = list(player_beliefs[pos])[0]
                 min_counts[val] += 1
                 
+        # A call proves one uncut copy beyond those revealed before it. A position that is
+        # already certain may be that very copy, so the call must not be added on top of it.
         for val, tracker in self.value_trackers.items():
             if player_id in tracker.called:
-                min_counts[val] += 1
+                revealed = sum(1 for pid, _ in tracker.revealed if pid == player_id)
+                min_counts[val] = max(min_counts[val], revealed + 1)
         return dict(min_counts)
 
     def _get_cache_key(self, player_id: int, min_counts: Dict):

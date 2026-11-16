@@ -95,3 +95,24 @@ enumeration everywhere else. `BeliefModel` is unchanged by it.
 
 The last table printed counts, for each belief model, the wires where a possible value was
 crossed out.
+
+## Fix applied (2026-11-16)
+
+The replacement of `_get_min_counts` above is now in `src/belief/global_belief_model.py`.
+Same 70 games, same check:
+
+| Belief model | Crossed out a possible value, before → after | … the true value |
+|---|---|---|
+| `GlobalBeliefModel` | 10 → 0 | 2 → 0 |
+| `BeliefModel` | 886 → 886 | 606 → 606 |
+
+`BeliefModel` is not touched by the fix: its beliefs are identical, move by move, in the two
+exports. One detail can mislead a re-run: the export keeps only the moves played by both models,
+and before the fix the wrong deduction in seed 28 (the case above) ended the global game one
+move early. With the fix that game lasts one move more, so the raw check compares 36 more wires
+(33,156 instead of 33,120) and `BeliefModel` shows 889 instead of 886, all on that extra move.
+Cut at the old length, the numbers are those in the table.
+
+Still open: the same double count in `ValueTracker.uncertain`, used by the iterative filters of
+`BeliefModel`. The test suite fails the same way with and without the fix (28 of 30 tests stop
+on a wire-length `ValueError` while building the game): it is out of date with the code.
