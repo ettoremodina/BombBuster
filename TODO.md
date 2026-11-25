@@ -10,8 +10,8 @@ Those form the basis for creating a more precise belief model for that player
 ## Debugging and Improvements
 
 - [x] KNOWN BUG in GlobalBeliefModel: corretto il 2026-11-16, vedi document/KNOWN_ISSUE_CALLED_VALUES.md
-- [ ] Stesso conteggio doppio in BeliefModel (filtri iterativi, ValueTracker.uncertain): da analizzare, vedi document/KNOWN_ISSUE_CALLED_VALUES.md
-- [ ] Test non aggiornati: 28 su 30 falliscono con un ValueError sulla lunghezza dei fili mentre creano la partita.
+- [x] Stesso conteggio doppio in BeliefModel (filtri iterativi, ValueTracker.uncertain): da analizzare, vedi document/KNOWN_ISSUE_CALLED_VALUES.md
+- [x] Test non aggiornati: 28 su 30 falliscono con un ValueError sulla lunghezza dei fili mentre creano la partita.
 
  rimuovi tessere con 99
  iterative filter may have a problem but I don't know how to test it properly

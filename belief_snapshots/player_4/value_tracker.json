@@ -1,0 +1,183 @@
+{
+  "0": {
+    "revealed": [
+      [
+        5,
+        0
+      ],
+      [
+        5,
+        1
+      ],
+      [
+        5,
+        2
+      ],
+      [
+        5,
+        3
+      ],
+      [
+        5,
+        4
+      ],
+      [
+        5,
+        5
+      ],
+      [
+        5,
+        6
+      ],
+      [
+        5,
+        7
+      ],
+      [
+        5,
+        8
+      ]
+    ],
+    "certain": [],
+    "called": [],
+    "uncertain": "0/9"
+  },
+  "1": {
+    "revealed": [],
+    "certain": [
+      [
+        4,
+        0
+      ]
+    ],
+    "called": [],
+    "uncertain": "3/4"
+  },
+  "2": {
+    "revealed": [],
+    "certain": [
+      [
+        4,
+        1
+      ],
+      [
+        4,
+        2
+      ]
+    ],
+    "called": [],
+    "uncertain": "2/4"
+  },
+  "3": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "4/4"
+  },
+  "4": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "4/4"
+  },
+  "5": {
+    "revealed": [],
+    "certain": [
+      [
+        4,
+        3
+      ]
+    ],
+    "called": [],
+    "uncertain": "3/4"
+  },
+  "6": {
+    "revealed": [],
+    "certain": [
+      [
+        4,
+        4
+      ]
+    ],
+    "called": [],
+    "uncertain": "3/4"
+  },
+  "6.5": {
+    "revealed": [],
+    "certain": [
+      [
+        4,
+        5
+      ]
+    ],
+    "called": [],
+    "uncertain": "0/1"
+  },
+  "7": {
+    "revealed": [],
+    "certain": [
+      [
+        4,
+        6
+      ]
+    ],
+    "called": [],
+    "uncertain": "3/4"
+  },
+  "7.5": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "1/1"
+  },
+  "8": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "4/4"
+  },
+  "8.5": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "1/1"
+  },
+  "9": {
+    "revealed": [],
+    "certain": [
+      [
+        4,
+        7
+      ],
+      [
+        4,
+        8
+      ]
+    ],
+    "called": [],
+    "uncertain": "2/4"
+  },
+  "10": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "4/4"
+  },
+  "11": {
+    "revealed": [],
+    "certain": [],
+    "called": [],
+    "uncertain": "4/4"
+  },
+  "12": {
+    "revealed": [],
+    "certain": [
+      [
+        4,
+        9
+      ]
+    ],
+    "called": [],
+    "uncertain": "3/4"
+  }
+}
